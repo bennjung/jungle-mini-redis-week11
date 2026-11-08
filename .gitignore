@@ -1,0 +1,12 @@
+# macOS
+.DS_Store
+
+# Dependencies and build output
+
+# Local environment variables
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
