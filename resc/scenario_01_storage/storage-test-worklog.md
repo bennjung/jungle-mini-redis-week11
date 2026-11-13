@@ -1,11 +1,13 @@
 # 저장소 단위 테스트 작업 기록
 
+문서와 테스트는 각각 `resc/scenario_01_storage/`와 `tests/scenario_01_storage/`로 이동했다. 아래 이력의 파일 경로는 현재 배치로 표기하며 당시 실행 결과는 유지한다. 테스트 입력·기대 결과는 변경하지 않았다.
+
 ## 코딩 전 명세 대조
 
 아래는 초기 작성 시점의 기록이다. 최신 상태 관찰 방식은 문서 끝의 ‘스냅샷 관찰 도구 분리’를 따른다.
 
 - 기준: `01-storage-scenario.md`의 확정 계약과 행동 테스트 케이스. 기존 입력·순서·반환·검증 시점을 유지한다.
-- 사용자 합의: `pytest`, 테스트마다 새 `MiniRedis()`, `storage.py`의 `MiniRedis`, `tests/test_storage.py`에 테스트 배치.
+- 사용자 합의: `pytest`, 테스트마다 새 `MiniRedis()`, `storage.py`의 `MiniRedis`, `tests/scenario_01_storage/test_storage.py`에 테스트 배치.
 - 호출 대상: 저장 `set(key, value)`, 조회 `get(key)`, 삭제 `delete(key)`. HTTP 없이 순차 실행한다.
 - 사전 상태는 `set` 성공을 확인하며 준비한다. 전체 상태는 `_snapshot()`이 반환하는 독립된 `키 → value` 사본으로 확인한다. 관찰용 딕셔너리가 저장소의 내부 구현을 뜻하지는 않는다.
 - 각 요청 반환 직후 결과의 필드·타입·내용을 확인하고, 다음 요청 전에 전체 상태를 비교한다. 아래 사전 상태와 입력의 실제 `null`은 Python `None`이다.
@@ -44,8 +46,8 @@
 ## 테스트 작성 단계 실행 기록
 
 - 실행 환경: Python 3.14.3, 프로젝트 `.venv`, pytest 9.2.0. Python 지원 버전을 새로 확정한 것은 아니다.
-- `.venv/bin/python -m pytest tests/test_storage.py --collect-only -q`: 성공, 21개 수집. S1 문서의 20개 실행 케이스와 스냅샷 사본 독립성 1개다.
-- `.venv/bin/python -m pytest tests/test_storage.py -q --tb=short`: 준비 단계 오류 21개. `storage.py`가 없어 `from storage import MiniRedis`에서 `ModuleNotFoundError`가 발생했다. 기대 결과 assertion 실패가 아니며, 저장소 행동의 통과·실패는 아직 미검증이다.
+- `.venv/bin/python -m pytest tests/scenario_01_storage/test_storage.py --collect-only -q`: 성공, 21개 수집. S1 문서의 20개 실행 케이스와 스냅샷 사본 독립성 1개다.
+- `.venv/bin/python -m pytest tests/scenario_01_storage/test_storage.py -q --tb=short`: 준비 단계 오류 21개. `storage.py`가 없어 `from storage import MiniRedis`에서 `ModuleNotFoundError`가 발생했다. 기대 결과 assertion 실패가 아니며, 저장소 행동의 통과·실패는 아직 미검증이다.
 - 명세 대조: S1-01~08과 하위 케이스의 입력·호출 순서·반복 횟수·응답 확인 시점을 유지했다. S1-07은 초과 길이 키에 `get`을 호출하지 않으며 전후 전체 상태로 무효한 항목 미추가를 검증하도록 작성했다.
 - `_snapshot()` 결과와 반환 딕셔너리는 키 집합·타입·내용을 검사한다. 실제 `None`, 문자열 `"null"`, 빈 문자열, 키 없음은 서로 구분한다.
 - 코드에는 스킵·xfail·대체 저장소를 넣지 않았다. 실제 저장소 구현과 HTTP 기능·동시성·TTL·성능·장애 복구·충돌·리사이즈 검증은 이번 작업 범위가 아니다.
@@ -59,7 +61,7 @@
 - 명세 대조: 위 ID별 호출 대상·사전 상태·입력·검증 시점·반환·유지 조건을 구현 기준으로 사용한다. 입력 제한 검증은 상태 변경 전에 끝낸다. 존재 여부는 `None` 비교 대신 키 포함 여부로 판정한다.
 - 추가 사용자 승인: 잘못된 키에 대한 조회·삭제와 입력 타입·UTF-8 인코딩 실패는 모두 `INVALID_INPUT`으로 거절하고 기존 상태를 보존한다.
 - 구현 전 추가 명세: 문서의 S1-09는 9개 무효 키를 `set`·`get`·`delete`에 각각 넣는 27개 케이스다. S1-10은 6개 무효 value를 `sample:one`에 저장하려는 케이스다. 정확한 입력은 해당 표를 따르며, 각 실행 전 두 정상 키를 준비하고 거절 반환 직후 전체 상태와 후속 두 키 조회를 검사한다.
-- 위 추가 검증은 `tests/test_storage_invalid_input.py`에 작성한다. 기존 S1-01~08 케이스는 수정하지 않는다.
+- 위 추가 검증은 `tests/scenario_01_storage/test_storage_invalid_input.py`에 작성한다. 기존 S1-01~08 케이스는 수정하지 않는다.
 
 ### 추가 테스트 작성 후, 동작 구현 전 실행
 
@@ -68,7 +70,7 @@
 ### 구현 후 실행 및 명세 재대조
 
 - `.venv/bin/python -m pytest tests/ -q`: **54 passed**. 기존 21개와 추가 33개를 실제 `MiniRedis` 구현으로 실행했다.
-- 기존 `tests/test_storage.py`의 SHA-256이 구현 전과 동일하다. 기존 테스트의 호출 대상·정확한 입력·순서·기대 결과를 변경하지 않았다.
+- 기존 `tests/scenario_01_storage/test_storage.py`의 SHA-256이 구현 전과 동일했다. 이후 시나리오별 폴더 정리에서는 경로·가져오기만 변경하고 기존 테스트의 호출 대상·정확한 입력·순서·기대 결과를 유지했다.
 - 구현: 인스턴스별 `self._data` 딕셔너리, 검증 후 저장·덮어쓰기, 순수 조회, 삭제 직전 value 반환, 전체 사본 스냅샷. 입력 거절 시 딕셔너리를 변경하지 않는다. 별도 해시 테이블은 구현하지 않았다.
 - 추가 거절 테스트: 세 함수의 무효 키 27개 조합과 set의 무효 value 6개 모두 반환·전후 전체 상태·두 정상 키 조회를 확인했다.
 - 미검증: HTTP 기능·동시 카운터·TTL·성능·장애 복구·총 저장량 한도·자원 부족·입력 누락. 54개 통과를 이 범위의 완료로 확장하지 않는다.
@@ -77,6 +79,6 @@
 
 - 사용자 요청: 실행 코드의 `_snapshot()` 메서드를 제거하고 테스트 전용 모듈로 분리한다.
 - 변경 전 `.venv/bin/python -m pytest tests/ -q`: 54개 통과.
-- 변경 범위: `tests/storage_helpers.py`의 `snapshot(store)`가 `store._data.copy()`를 반환한다. 저장소 생성·set·get·delete 호출 대상, 모든 테스트의 사전 상태·입력·순서·기대 결과·검증 시점은 유지한다. 각 호출 직후와 거절 전후 전체 상태 관찰의 위치도 유지한다.
+- 변경 범위: `tests/scenario_01_storage/storage_helpers.py`의 `snapshot(store)`가 `store._data.copy()`를 반환한다. 저장소 생성·set·get·delete 호출 대상, 모든 테스트의 사전 상태·입력·순서·기대 결과·검증 시점은 유지한다. 각 호출 직후와 거절 전후 전체 상태 관찰의 위치도 유지한다.
 - 실행 코드가 테스트 모듈을 참조하거나 테스트 도구를 호출하지 않도록 한다. 기존 스냅샷 독립성 테스트는 같은 사본 수정·추가·삭제를 새 관찰 함수에 적용한다.
 - 변경 후 `.venv/bin/python -m pytest tests/ -q`: **54개 모두 통과**. 기존 입력과 기대 결과를 유지했으며 변경한 것은 상태 관찰 함수의 위치와 호출 방식이다.

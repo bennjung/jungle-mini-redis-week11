@@ -3,8 +3,8 @@
 ## 상태와 근거
 
 - 아래의 확정된 행동 계약은 사용자 승인 사항이다. 테스트에는 이 계약을 반영하되, 응답의 정확한 표현·호출 방식 등 미정 부분까지 확정된 것으로 간주하지 않는다.
-- 요구사항 원문: [phase.md](phase.md)의 해시 테이블 기반 저장소, 외부 사용, API 형태, 데이터 무효화, 저장·조회·삭제 단위 테스트 및 외부 사용 기능 테스트.
-- 공통 개발 흐름: [AGENTS.md](../AGENTS.md).
+- 요구사항 원문: [phase.md](../phase.md)의 해시 테이블 기반 저장소, 외부 사용, API 형태, 데이터 무효화, 저장·조회·삭제 단위 테스트 및 외부 사용 기능 테스트.
+- 공통 개발 흐름: [AGENTS.md](../../AGENTS.md).
 - 이 문서는 외부 행동, 승인된 HTTP API, HTTP와 저장소 사이의 함수 계약 및 저장소 단위 테스트 경계를 정의한다. 저장소는 `storage.py`의 `MiniRedis` 클래스이며, 각 인스턴스의 Python `dict`에 키·`value`를 보관한다. 동시 호출 조건은 아직 결정하지 않는다.
 
 ## 사용자 시나리오
@@ -106,7 +106,7 @@
 - `set(key, value)`: 키·value 타입 확인 → UTF-8 바이트 수 확인 → 위반 시 상태 유지 및 `INVALID_INPUT` 반환 → 정상이면 `self._data[key] = value` → 성공 반환.
 - `get(key)`: 키 타입·UTF-8 바이트 수 확인 → 위반 시 `INVALID_INPUT` 반환 → 키가 없으면 `found=False` → 있으면 `found=True`와 보관한 value 반환. 저장 상태는 변경하지 않는다.
 - `delete(key)`: 키 타입·UTF-8 바이트 수 확인 → 위반 시 상태 유지 및 `INVALID_INPUT` 반환 → 키가 없으면 `found=False` → 있으면 `pop`으로 삭제 직전 value를 확보하며 제거 → `found=True`와 해당 value 반환.
-- 테스트 전용 `snapshot(store)`: `tests/storage_helpers.py`에서 저장소 내부 딕셔너리의 독립된 전체 사본을 반환한다. value가 문자열 또는 None이므로 사본의 항목 변경이 원본에 영향을 주지 않는다. `MiniRedis`의 메서드가 아니다.
+- 테스트 전용 `snapshot(store)`: `tests/scenario_01_storage/storage_helpers.py`에서 저장소 내부 딕셔너리의 독립된 전체 사본을 반환한다. value가 문자열 또는 None이므로 사본의 항목 변경이 원본에 영향을 주지 않는다. `MiniRedis`의 메서드가 아니다.
 - 키 존재 여부는 value가 None인지와 별개로 `key in self._data`로 확인한다. 입력 인코딩 실패만 `UnicodeEncodeError`로 구분하며 예상하지 못한 모든 오류를 입력 오류로 바꾸지 않는다.
 
 ### 기존 테스트의 내부 호출 연결
@@ -118,14 +118,14 @@
 
 ### 확정된 단위 테스트 실행 계약
 
-- 기본 테스트 파일은 `tests/test_storage.py`, 추가 입력 거절 테스트는 `tests/test_storage_invalid_input.py`, 도구는 `pytest`다. 각 테스트 및 매개변수 조합마다 새 `MiniRedis()`를 생성하며 처음 상태는 비어 있다.
+- 기본 테스트 파일은 `tests/scenario_01_storage/test_storage.py`, 추가 입력 거절 테스트는 `tests/scenario_01_storage/test_storage_invalid_input.py`, 도구는 `pytest`다. 각 테스트 및 매개변수 조합마다 새 `MiniRedis()`를 생성하며 처음 상태는 비어 있다.
 - 사전 상태는 `set`으로 준비하고 각 저장 성공 반환을 확인한다. 내부 자료구조에 항목을 직접 주입하지 않는다.
-- `tests/storage_helpers.py`의 `snapshot(store)`는 현재 전체 `키 → value`를 담은 독립된 Python 딕셔너리 사본을 반환한다. 문자열과 `None`을 그대로 보존하며 저장소를 변경하지 않는다. 항목 수만 반환하는 방식은 사용하지 않는다.
+- `tests/scenario_01_storage/storage_helpers.py`의 `snapshot(store)`는 현재 전체 `키 → value`를 담은 독립된 Python 딕셔너리 사본을 반환한다. 문자열과 `None`을 그대로 보존하며 저장소를 변경하지 않는다. 항목 수만 반환하는 방식은 사용하지 않는다.
 - `snapshot(store)`는 테스트 전용 함수다. `store._data.copy()`로 사본을 만들며 `MiniRedis`에는 스냅샷 메서드를 두지 않는다. 테스트에서 각 동작 전후에 필요에 따라 호출하고 실행 코드는 이 모듈을 가져오거나 호출하지 않는다. HTTP에 노출하지 않는다.
 - 각 호출 반환 직후 필드 구성·타입·내용을 확인하고 전체 스냅샷을 기대 상태와 비교한다. 기존 케이스의 호출 순서는 유지한다.
 - S1-07의 거절 행은 요청 전후 스냅샷이 같아야 한다. 성공 행은 지정한 키만 추가·변경된 전체 상태여야 한다. 문서의 후속 조회도 생략하지 않는다.
 - 스냅샷 독립성은 별도 테스트로 검증한다. 반환 사본의 항목을 수정·추가·삭제해도 실제 저장소가 변경되지 않아야 한다.
-- 전체 실행 명령은 프로젝트 루트에서 `.venv/bin/python -m pytest tests/`다. 기존 21개만 확인하려면 `.venv/bin/python -m pytest tests/test_storage.py`로 실행한다. 의존성은 `requirements-dev.txt`에 기록한다.
+- 전체 실행 명령은 프로젝트 루트에서 `.venv/bin/python -m pytest tests/`다. 기존 21개만 확인하려면 `.venv/bin/python -m pytest tests/scenario_01_storage/test_storage.py`로 실행한다. 의존성은 `requirements-dev.txt`에 기록한다.
 
 ## 행동 테스트 케이스
 
@@ -303,7 +303,7 @@
 
 - 문서화 범위: 저장·반복 조회, 삭제 반환·삭제 후 없음, 다른 키 보존, 덮어쓰기, 없는 키·반복 삭제, 빈 문자열·JSON·숫자 표현·null 글자 보존, 크기 경계, 실제 `null` 보관·삭제·덮어쓰기, 모든 진입점의 무효 키 거절 및 무효 value 거절.
 - `storage.py`에 구현했으며 `.venv/bin/python -m pytest tests/ -q` 실행 결과 54개가 통과했다. 기존 S1-01~08의 20개 케이스와 스냅샷 독립성 1개, 추가 S1-09·10의 33개 케이스다. 상세 명세 대조·구현 전후 실행 결과는 [작업 기록](storage-test-worklog.md)에 남긴다.
-- 이 결과는 저장소 단위 테스트에 한정한다. HTTP의 분리 테스트·실행 기록은 [HTTP 담당 범위](01-http-scope.md)에 둔다. 실제 외부 HTTP 기능·동시성·TTL·성능·장애 복구는 아직 검증하지 않았다.
+- 이 결과는 저장소 단위 테스트에 한정한다. HTTP 분리·실제 저장소 연결·로컬 HTTP 기능 검증의 결과는 [HTTP 담당 범위](01-http-scope.md)에 둔다. 동시성·TTL·성능·장애 복구는 아직 검증하지 않았다.
 - 구현 언어는 Python이며 테스트 도구·클래스 배치·준비·전체 상태 관찰 방법과 내부 `dict` 사용이 합의되었다. Python·Flask 지원 버전은 미정이며 HTTP 상세는 [HTTP 담당 범위](01-http-scope.md)를 따른다. 테스트 입력과 기대 결과를 구현 편의에 맞춰 변경하지 않는다.
 - 해시 충돌·리사이즈는 Python `dict`에 맡기며 별도의 해시 테이블을 직접 구현하지 않는다. 아래 미정 동작에는 기대 결과를 지어내지 않는다.
 
@@ -313,8 +313,8 @@
 - 입력 거절 외 요청 실패·응답 유실 시 보장 범위.
 - 키의 공백·제어문자, 대소문자 비교와 유니코드 정규화 정책 등 아직 합의하지 않은 세부 동작.
 - 총 저장량 한도와 자원 부족 처리. 항목별 크기 상한과 별개다.
-- HTTP 기능 테스트의 구현 배치. 미정 동작에 의존하는 테스트는 임의로 완성하지 않는다.
+- 미정 동작에 의존하는 테스트는 임의로 완성하지 않는다. 확정된 HTTP 테스트의 배치·실행 방법은 [HTTP 담당 범위](01-http-scope.md)를 따른다.
 
 ## 다음 문서
 
-[2. 같은 카운터의 동시 증가](02-concurrent-counter-scenario.md). 이 문서의 저장·조회 성공 의미가 다음 단계의 사전 상태와 관찰 기준이 된다.
+[2. 같은 카운터의 동시 증가](../scenario_02_concurrent_counter/02-concurrent-counter-scenario.md). 이 문서의 저장·조회 성공 의미가 다음 단계의 사전 상태와 관찰 기준이 된다.

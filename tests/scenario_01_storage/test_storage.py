@@ -1,8 +1,8 @@
-"""resc/01-storage-scenario.md의 저장소 행동 계약. HTTP 테스트는 별도다."""
+"""resc/scenario_01_storage/01-storage-scenario.md의 저장소 행동 계약. HTTP 테스트는 별도다."""
 
 import pytest
 
-from tests.storage_helpers import snapshot
+from tests.scenario_01_storage.storage_helpers import snapshot
 
 
 def assert_mapping(actual, expected):

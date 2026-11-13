@@ -3,7 +3,7 @@
 import pytest
 
 from storage import MiniRedis
-from tests.storage_helpers import snapshot
+from tests.scenario_01_storage.storage_helpers import snapshot
 
 
 @pytest.fixture

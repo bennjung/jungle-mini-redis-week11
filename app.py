@@ -41,3 +41,12 @@ def create_app(storage):
         return result, status
 
     return app
+
+
+if __name__ == "__main__":
+    from storage import MiniRedis
+
+    # 한 저장소를 요청 간 공유한다. 동시 호출·운영 배포를 위한 서버 설정은 아니다.
+    create_app(MiniRedis()).run(
+        host="127.0.0.1", port=5000, threaded=False, use_reloader=False
+    )

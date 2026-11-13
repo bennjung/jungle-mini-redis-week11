@@ -2,7 +2,7 @@
 
 대상: app.create_app(storage)가 반환하는 실제 Flask 앱.
 저장소는 합의된 set/get/delete 호출을 기록하고 요청별 지정 결과만 반환한다.
-실행: python3 -m pytest tests/test_http.py -v
+실행: python3 -m pytest tests/scenario_01_storage/test_http.py -v
 """
 
 from copy import deepcopy
@@ -238,3 +238,28 @@ def test_put_type_validation_delegated_to_storage(http_boundary, field, invalid_
     assert response.status_code == 400
     assert response.is_json
     assert response.get_json() == {"error": "INVALID_INPUT"}
+
+
+@pytest.mark.parametrize(
+    "method,operation", [("PUT", "set"), ("GET", "get"), ("DELETE", "delete")]
+)
+def test_unexpected_storage_error_is_not_invalid_input(http_boundary, method, operation):
+    """내부 예외를 입력 오류로 삼키지 않는다. 새 HTTP 오류 정책은 정하지 않는다."""
+    client, storage = http_boundary
+    client.application.config["PROPAGATE_EXCEPTIONS"] = True
+    error = RuntimeError("unexpected storage failure")
+    getattr(storage, operation).side_effect = error
+
+    with pytest.raises(RuntimeError) as caught:
+        if method == "PUT":
+            client.put("/kv", json={"key": "sample:one", "value": "hello"})
+        else:
+            client.open("/kv", method=method, query_string={"key": "sample:one"})
+
+    assert caught.value is error
+    expected_call = (
+        call.set("sample:one", "hello")
+        if method == "PUT"
+        else getattr(call, operation)("sample:one")
+    )
+    assert storage.mock_calls == [expected_call]
