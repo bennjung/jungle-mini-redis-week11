@@ -9,7 +9,7 @@
 
 - 과제 요구사항 원문은 `resc/phase.md`에서 확인합니다. 사용자와 합의한 변경 사항은 함께 반영해 판단합니다. 원문을 에이전트의 해석으로 덮어쓰지 않습니다.
 - 사용자 시나리오와 행동 테스트는 아래 네 문서에서 확인합니다. `docs/`의 조사 자료와 개인 검토 의견은 확정 계약을 대체하지 않습니다.
-  1. `resc/01-storage-scenario.md`: 외부에서 값 보관·조회·폐기. ‘행동 테스트 케이스’에 S1-01~S1-08과 하위 케이스의 정확한 입력·순서·검증 시점·기대 결과·유지 조건을 기록합니다. 실행 인터페이스 미정과 미실행 상태를 구분합니다.
+  1. `resc/01-storage-scenario.md`: 외부에서 값 보관·조회·폐기. ‘행동 테스트 케이스’에 S1-01~S1-10과 하위 케이스의 정확한 입력·순서·검증 시점·기대 결과·유지 조건을 기록합니다. 실행 범위와 미검증 동작을 구분합니다.
   2. `resc/02-concurrent-counter-scenario.md`: 같은 카운터의 동시 증가.
   3. `resc/03-performance-scenario.md`: 정확성을 유지한 성능 비교. 사용자 기능이 아니라 검증 시나리오입니다.
   4. `resc/04-response-cache-scenario.md`: API 응답 재사용·만료·수동 무효화.
@@ -61,16 +61,18 @@
 결정 기록
 
 - 설계는 목표·범위 → 시스템 경계·책임 → 요청 처리 흐름 → 내부 함수 계약 → 자료구조 순으로 구체화합니다. 상위 책임을 정하기 전에 함수 반환형이나 해시 충돌 방식부터 확정하지 않습니다.
-- HTTP와 저장소의 입력 검증 분리가 승인되었습니다. HTTP는 JSON 해석·본문 구조·필수 필드 존재 여부를 검사하고, 저장소는 `key`·`value` 타입과 UTF-8 바이트 크기를 상태 변경 전에 검사합니다. HTTP는 저장소 호출·HTTP 응답 생성을, 저장소는 상태 조작·존재 여부와 결과 제공을 담당합니다. 타입·크기까지 전부 HTTP로 옮기는 중간 변경은 채택하지 않습니다. 세부 흐름은 `resc/01-storage-scenario.md`를 따릅니다. 해시 충돌 처리 방식은 아직 미정입니다.
+- HTTP와 저장소의 입력 검증 분리가 승인되었습니다. HTTP는 JSON 해석·본문 구조·필수 필드 존재 여부를 검사하고, 저장소는 `key`·`value` 타입과 UTF-8 바이트 크기를 상태 변경 전에 검사합니다. HTTP는 저장소 호출·HTTP 응답 생성을, 저장소는 상태 조작·존재 여부와 결과 제공을 담당합니다. 타입·크기까지 전부 HTTP로 옮기는 중간 변경은 채택하지 않습니다. 세부 흐름은 `resc/01-storage-scenario.md`와 `resc/01-http-scope.md`를 따릅니다. 내부 저장 구조는 Python `dict`를 사용하며 해시 계산·충돌 처리·리사이즈는 Python에 맡깁니다.
 - 두 부분 사이의 호출은 `set(key, value)`·`get(key)`·`delete(key)`입니다. 저장 성공은 `{"ok": True}`, 조회·삭제 정상 결과는 합의한 `found`·`value`, 타입·크기 제한 위반은 `{"error": "INVALID_INPUT"}`을 반환합니다. HTTP가 필수 필드를 확인한 뒤 타입·크기는 변환하지 않고 저장소에 전달합니다. 입력 거절 전용 예외는 도입하지 않습니다.
 - HTTP의 JSON·본문 구조·필수 필드 검증 실패는 저장소 호출 없이 HTTP 400과 `{"error":"INVALID_INPUT"}`으로 거절합니다. 저장소의 `INVALID_INPUT` 반환도 같은 400 응답으로 연결하고 정상 반환은 200으로 연결합니다. 예상하지 못한 내부 오류를 일괄적으로 입력 오류로 바꾸지 않습니다. 동시 호출 허용 여부와 책임은 현재 결정하지 않습니다.
+- 세 함수 모두 잘못된 키 타입·UTF-8 인코딩 실패·크기 제한 위반을 `INVALID_INPUT`으로 거절합니다. `set`의 문자열·None 외 value와 UTF-8 인코딩 실패도 같은 오류로 거절하며 전체 상태를 보존합니다. Python 함수 인자 누락은 별도이며, HTTP JSON·본문 구조·필수 필드 오류는 위 HTTP 계약을 따릅니다. 저장소 추가 테스트는 `tests/test_storage_invalid_input.py`이며 정확한 입력은 문서 1의 S1-09·10을 따릅니다.
 
 - 저장 행동의 확정 계약은 `resc/01-storage-scenario.md`에서 확인합니다. 덮어쓰기, 삭제 값 반환, 없음 구분, UTF-8 텍스트 보관, 빈 값 허용, null·빈 키 거부, 키 1~256바이트·값 0~65,536바이트, 입력 거절 시 상태 보존이 승인되었습니다.
 - 위 크기 상한은 승인된 초기 계약입니다. 총 메모리 한도가 아니며, 임의로 조정하지 않습니다. `value`는 UTF-8 문자열 또는 실제 `null`을 허용합니다. 키의 `null`과 빈 문자열은 거부합니다. 크기 상한은 키·문자열 `value`의 UTF-8 바이트 수 기준입니다.
 - 조회·삭제 결과는 키가 있으면 `{"found": true, "value": ...}`, 없으면 `{"found": false}`로 확정되었습니다. 없을 때 `value` 필드는 생략합니다. 삭제의 `value`는 삭제 직전 내용입니다.
 - 외부 통신은 HTTP + JSON입니다. `PUT /kv`는 JSON 본문의 `key`·`value`로 저장하고 HTTP 200과 `{"ok":true}`를 반환합니다. `GET /kv`·`DELETE /kv`는 쿼리의 `key`를 사용하고 키가 없어도 HTTP 200과 합의한 결과를 반환합니다. 확정 입력 제한 위반은 HTTP 400과 `{"error":"INVALID_INPUT"}`입니다. 세부 기준은 `resc/01-storage-scenario.md`를 따릅니다.
-- 구현 언어는 Python, 웹 프레임워크는 Flask, 테스트 도구는 pytest로 확정되었습니다. Flask 선정 근거는 문서 01의 HTTP 계약을 충족하고 팀원이 사용 경험을 갖고 있어 다른 프레임워크 도입이 필요하지 않다는 것입니다. HTTP는 `app.py`의 `create_app(storage)`로 전달받은 저장소를 사용하며, HTTP 경계 테스트는 `tests/test_http.py`에 둡니다. Python·Flask 버전과 실제 저장소의 클래스·모듈 배치 및 생성 방법은 아직 미정입니다. 기존 Redis 클라이언트와의 통신 규약 호환은 요구하지 않습니다. 입력 제한은 JSON·URL 해석 후 키·문자열 `value`의 UTF-8 바이트 수로 검사합니다.
+- 구현 언어는 Python, 웹 프레임워크는 Flask, 테스트 도구는 pytest로 확정되었습니다. Flask 선정 근거는 문서 01의 HTTP 계약을 충족하고 팀원이 사용 경험을 갖고 있어 다른 프레임워크 도입이 필요하지 않다는 것입니다. HTTP는 `app.py`의 `create_app(storage)`로 전달받은 저장소를 사용하며, HTTP 경계 테스트는 `tests/test_http.py`에 둡니다. Python·Flask 지원 버전은 미정입니다. 기존 Redis 클라이언트와의 통신 규약 호환은 요구하지 않습니다. 입력 제한은 JSON·URL 해석 후 키·문자열 `value`의 UTF-8 바이트 수로 검사합니다.
 - 찬은 문서 01의 HTTP 요청 해석·입력 검증·입력 거절·저장소 호출·HTTP 응답 생성을 담당합니다. HTTP 담당 검증 범위는 `resc/01-http-scope.md`에서 원본 테스트 ID에 연결하며, 저장소 행동이나 실제 외부 사용 검증을 대체하지 않습니다.
+- 저장소는 `storage.py`의 `MiniRedis()`로 생성하며 인스턴스별 빈 딕셔너리를 소유합니다. 저장소 단위 테스트는 `tests/test_storage.py`와 `tests/test_storage_invalid_input.py`를 사용합니다. 각 테스트는 새 저장소를 만들고 `set`으로 사전 상태를 준비합니다. 전체 상태 관찰은 테스트 전용 `tests/storage_helpers.py`의 `snapshot(store)`로 수행하며, 실행 코드에 스냅샷 메서드를 두지 않습니다. 자세한 계약과 실행 기록은 문서 1에서 확인합니다.
 - `resc/jung-storage-scenario.md`, `resc/chan-scenario-template.md`, `resc/scenario-preparation-template.md`의 개인 의견은 검토 입력입니다. 확정 계약과 충돌하는 과거 제안은 합의로 간주하지 않으며 개인 기록을 임의로 덮어쓰지 않습니다.
 
 기술 스택 / 제한
