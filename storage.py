@@ -1,6 +1,7 @@
 """딕셔너리를 사용하는 Mini Redis 저장소."""
 
 import json
+import math
 
 
 def _json_content_supported(value, path):
@@ -131,6 +132,8 @@ class MiniRedis:
         if isinstance(amount, bool) or not isinstance(amount, (int, float)):
             return {"error": "TYPE_MISMATCH", "field": "amount",
                     "actual_type": _json_type(amount)}
+        if isinstance(amount, float) and not math.isfinite(amount):
+            return {"error": "OUT_OF_RANGE"}
         if amount < 0:
             return {"error": "NEGATIVE_AMOUNT"}
 
@@ -138,6 +141,8 @@ class MiniRedis:
             if isinstance(bound, bool) or not isinstance(bound, (int, float)):
                 return {"error": "TYPE_MISMATCH", "field": field,
                         "actual_type": _json_type(bound)}
+            if isinstance(bound, float) and not math.isfinite(bound):
+                return {"error": "OUT_OF_RANGE"}
 
         if key not in self._data:
             return {"error": "NOT_FOUND"}
@@ -146,8 +151,9 @@ class MiniRedis:
             return {"error": "TYPE_MISMATCH", "field": "value",
                     "actual_type": _json_type(current)}
 
-        result = current + amount if sign == 1 else current - amount
         try:
+            # 큰 정수와 소수의 혼합 연산은 계산 자체에서 OverflowError가 날 수 있다.
+            result = current + amount if sign == 1 else current - amount
             size = len(json.dumps(result, ensure_ascii=False, separators=(",", ":"),
                                   allow_nan=False).encode("utf-8"))
         except (TypeError, ValueError, OverflowError):

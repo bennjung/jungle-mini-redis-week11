@@ -115,3 +115,30 @@ def test_c06_amount_before_bound_and_value(operation):
     actual = getattr(store, operation)("counter:one", "1")
     assert_json(actual, {"error": "TYPE_MISMATCH", "field": "amount", "actual_type": "string"})
     assert_json(state(store), before)
+
+
+@pytest.mark.parametrize("operation,initial,amount,bound", [
+    ("incr", 10 ** 309, 1.0, {}),
+    ("decr", 10 ** 309, 1.0, {}),
+    ("incr", 1e308, 1e308, {"maximum": 0}),
+    ("decr", -1e308, 1e308, {"minimum": 0}),
+])
+def test_c07_unrepresentable_calculation_preserves_state(operation, initial, amount, bound):
+    store = prepared_store(initial)
+    before = state(store)
+    assert_json(getattr(store, operation)("counter:one", amount, **bound), {"error": "OUT_OF_RANGE"})
+    assert_json(state(store), before)
+
+
+@pytest.mark.parametrize("operation", ["incr", "decr"])
+@pytest.mark.parametrize("field", ["amount", "bound"])
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")],
+                         ids=["nan", "infinity", "negative-infinity"])
+def test_c07_nonfinite_input_is_not_json_number(operation, field, value):
+    store = prepared_store(10)
+    before = state(store)
+    bound_name = "maximum" if operation == "incr" else "minimum"
+    amount = value if field == "amount" else 1
+    bound = {bound_name: value} if field == "bound" else {}
+    assert_json(getattr(store, operation)("counter:one", amount, **bound), {"error": "OUT_OF_RANGE"})
+    assert_json(state(store), before)

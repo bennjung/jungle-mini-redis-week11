@@ -1,4 +1,4 @@
-"""사용자가 추가 승인한 S1-09·S1-10 입력 거절 계약."""
+"""S1-09 입력 거절과 승인된 JSON 확장을 반영한 S1-10 계약."""
 
 import pytest
 
@@ -51,10 +51,6 @@ def test_s1_09_reject_invalid_keys_without_state_changes(store, operation, key):
 @pytest.mark.parametrize(
     "value",
     [
-        pytest.param(1, id="S1-10-01"),
-        pytest.param(True, id="S1-10-02"),
-        pytest.param([], id="S1-10-03"),
-        pytest.param({}, id="S1-10-04"),
         pytest.param(b"hello", id="S1-10-05"),
         pytest.param("\ud800", id="S1-10-06"),
     ],
@@ -63,3 +59,19 @@ def test_s1_10_reject_invalid_values_without_state_changes(store, value):
     before = snapshot(store)
     response = store.set("sample:one", value)
     assert_rejected_and_unchanged(store, response, before)
+
+
+@pytest.mark.parametrize("value", [
+    pytest.param(1, id="S1-10-01"),
+    pytest.param(True, id="S1-10-02"),
+    pytest.param([], id="S1-10-03"),
+    pytest.param({}, id="S1-10-04"),
+])
+def test_s1_10_json_values_replace_target_only(store, value):
+    assert store.set("sample:one", value) == {"ok": True}
+    assert snapshot(store) == {"sample:one": value, "sample:two": "world"}
+    for _ in range(2):
+        result = store.get("sample:one")
+        assert result == {"found": True, "value": value}
+        assert type(result["value"]) is type(value)
+        assert store.get("sample:two") == {"found": True, "value": "world"}

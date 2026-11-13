@@ -4,7 +4,7 @@
 
 - 원본: [01-storage-scenario.md](01-storage-scenario.md). 행동 계약과 테스트의 사전 상태·입력·순서·검증 시점·기대 결과·유지 조건은 원본을 따른다.
 - 외부 사용자를 위한 요청·응답·입력 제한·오류·사용 예시는 프로젝트 루트의 [REST API 명세](../../rest-api.md)에 둔다. 내부 설계·테스트 기록은 이 문서에 유지한다.
-- REST API 명세 8절에는 JSON 자료형 지원·증감의 승인된 미구현 확장 계약을 별도로 기록한다. 아래 실행 결과와 문자열·실제 `null` 기준의 기존 계약은 확장 구현·검증 완료를 뜻하지 않는다.
+- REST API 명세 8절의 JSON 자료형 지원·증감을 구현했다. 아래 과거 실행 결과는 당시 문자열·실제 `null` 기준의 검증 이력이며, 현재 확장 검증은 신규 테스트와 구분한다.
 - 신규 자료형·증감의 [테스트 케이스](../scenario_02_concurrent_counter/02-test-cases.md)는 기존 137개 통과 기록과 구분한다. HTTP 시험 클라이언트 경로와 실제 TCP 동시 요청의 실행 범위를 혼동하지 않는다.
 - 담당: 찬. 범위는 문서 01 전체 중 HTTP 요청 해석·JSON 및 본문 구조·필수 필드 검사·저장소 호출·HTTP 응답 생성이다. S1-01 하나로 한정하지 않는다.
 - 구현 언어는 Python, 웹 프레임워크는 Flask로 선정했다. Flask로 현재 계약을 충족할 수 있고 팀원이 사용 경험을 갖고 있어, 현재 요구를 위해 다른 프레임워크를 도입할 이유가 없다.
@@ -15,7 +15,7 @@
 ## 시나리오별 파일 배치
 
 - 문서·개인 검토 메모·API 명세·작업 기록은 `resc/scenario_01_storage/`, 테스트와 전용 상태 관찰 도구는 `tests/scenario_01_storage/`에 모은다.
-- 다른 시나리오는 두 루트 아래 각각 `scenario_02_concurrent_counter/`, `scenario_03_performance/`, `scenario_04_response_cache/`를 사용한다. 02의 신규 HTTP·동시 요청 테스트와 01의 JSON 자료형 확장 테스트는 구현 전 실패 확인 단계로 작성했다. 03~04 테스트는 아직 작성하지 않았다.
+- 다른 시나리오는 두 루트 아래 각각 `scenario_02_concurrent_counter/`, `scenario_03_performance/`, `scenario_04_response_cache/`를 사용한다. 02의 HTTP·저장소 단위·동시 요청 테스트와 01의 JSON 자료형 확장 테스트를 구현 전 실패 확인 후 구현 검증에 사용한다. 03~04 테스트는 아직 작성하지 않았다.
 - 공통 요구사항 `resc/phase.md`와 `resc/템플릿-scenario-preparation-template.md`는 이동하지 않는다. `app.py`·`storage.py`도 프로젝트 루트에 유지한다.
 - 이 문서의 과거 실행 이력에 적힌 테스트 파일 경로는 현재 폴더 배치로 갱신했고 당시 결과는 유지했다. 폴더 이동 후 전체 테스트를 다시 실행해 137개 통과와 상대 링크 40개 유효성을 확인했다.
 
@@ -41,7 +41,7 @@
 
 - 이 문서는 원본 저장 시나리오를 대체하지 않는 HTTP 담당 상세 문서다. 원본의 S1 입력·순서·기대 결과는 유지하고, HTTP 기술 선택·책임 분리 상세·구현·테스트·실행 이력은 이 문서에 모은다.
 - HTTP는 JSON 해석·객체 형태의 본문·필수 필드 존재 여부를 확인한다. PUT의 `key`·`value`, GET·DELETE 쿼리의 `key`가 필수다. 필드 누락과 실제 `null`을 구분하며, 타입·크기를 검사하거나 임의로 변환하지 않는다.
-- 저장소는 HTTP 없이 직접 호출되어도 키·`value` 타입·크기를 상태 변경 전에 검사한다. 키는 문자열 1~256 UTF-8 바이트, `value`는 문자열 0~65,536 UTF-8 바이트 또는 실제 `None`이다. 바이트 수는 JSON·URL 해석 후 문자열 기준이며 실제 `None`을 문자열 `"null"`로 변환하지 않는다.
+- 저장소는 HTTP 없이 직접 호출되어도 키·value 타입·크기를 상태 변경 전에 검사한다. 키는 문자열 1~256 UTF-8 바이트, value는 JSON 전체 자료형을 허용하며 65,536바이트 상한이다. 최상위 문자열은 내용의 UTF-8 크기, 실제 None은 0바이트, 나머지는 REST API 8.2절의 JSON 표현 크기를 따른다. 실제 None을 문자열 `"null"`로 변환하지 않는다.
 - `set`·`get`·`delete`의 타입·크기 제한 위반은 `{"error":"INVALID_INPUT"}` 반환으로 전달하고, 기존 항목·다른 키를 보존하며 새 항목을 만들지 않는다. 입력 거절 전용 예외는 도입하지 않는다.
 - HTTP 형식 오류와 저장소의 타입·크기 오류는 외부에서 같은 HTTP 400·`{"error":"INVALID_INPUT"}`으로 응답한다. 오류에 `ok`·`found`를 섞지 않는다. 정상 응답은 기존 `ok`·`found`·`value` 계약을 그대로 따른다.
 - S1-07의 필드는 모두 존재하므로 거절 행도 `set`에 전달한다. HTTP 분리 테스트는 저장소 반환 연결을 확인하며 실제 크기 판정·거절 전 상태 보존·무효 항목 비생성은 실제 저장소 단위 테스트에서 별도로 확인한다.
@@ -231,16 +231,17 @@
 
 ### 명세 대조 후 추가한 누락 검증
 
-아래 17개 HTTP 조합은 각 테스트마다 독립된 실제 저장소를 만든다. PUT으로 `sample:one="hello"`, `sample:two="world"`를 준비하고 성공 응답 및 정확한 전체 스냅샷을 확인한다. 지정한 오류 요청 직후 HTTP 400·`{"error":"INVALID_INPUT"}`과 전체 상태 불변을 검사한 뒤 두 정상 키의 GET 응답을 각각 확인한다.
+아래 17개 HTTP 조합은 각 테스트마다 독립된 실제 저장소를 만든다. PUT으로 `sample:one="hello"`, `sample:two="world"`를 준비한다. 오류 13개 조합은 직후 HTTP 400·`{"error":"INVALID_INPUT"}`과 전체 상태 불변을 확인하고, 승인된 JSON 타입의 성공 4개는 대상 덮어쓰기·자료형과 다른 키 보존을 확인한다. 과거에는 17개 모두 입력 거절이었으나 JSON 계약 전환으로 같은 입력의 기대를 동기화했다.
 
 | 테스트 함수 | 원본 입력·호출 연결 | 실행 항목 |
 | --- | --- | --- |
 | `test_s1_09_invalid_json_key_preserves_state` | S1-09-01·02·03·04·05·06·08·09의 키를 변경 없이 PUT JSON에 넣고 `value="new"` 사용: `null`, `""`, `1`, `true`, `[]`, `{}`, `a` 257회, JSON 이스케이프로 표현한 `"\ud800"` | 8개 |
 | `test_s1_09_invalid_query_key_preserves_state` | S1-09-02·08의 문자열 키 `""`·`a` 257회를 GET·DELETE 쿼리로 전달 | 4개 |
-| `test_s1_10_invalid_json_value_preserves_state` | S1-10-01·02·03·04·06의 `value`인 `1`, `true`, `[]`, `{}`, JSON 이스케이프로 표현한 `"\ud800"`을 `sample:one`에 PUT | 5개 |
+| `test_s1_10_invalid_json_value_preserves_state` | S1-10-06의 JSON 이스케이프 `"\ud800"`을 PUT하고 거절·상태 보존 확인 | 1개 |
+| `test_s1_10_json_value_replaces_target_only` | 승인된 타입 지원에 따라 S1-10-01~04의 `1`, `true`, `[]`, `{}`를 같은 키에 PUT하고 성공·타입·다른 키 보존 확인 | 4개 |
 
 - S1-09-07의 `b"key"`와 S1-10-05의 `b"hello"`는 JSON 타입이 아니므로 단위 테스트만 유지한다. GET·DELETE 쿼리는 문자열이므로 `None`·숫자·불리언·배열·객체를 원래 Python 타입으로 전달할 수 없다. 단독 서로게이트를 정상 UTF-8 URL로 표현할 수 없으므로 그 쿼리 입력도 새로 만들지 않는다. 문자열 `"None"`·`"1"` 등으로 바꾸어 원본 케이스를 검증했다고 보고하지 않는다.
-- `tests/scenario_01_storage/test_http.py`의 `test_unexpected_storage_error_is_not_invalid_input`는 PUT·GET·DELETE 각각의 저장소 함수에 `RuntimeError`를 설정한 3개다. 유효한 기존 입력 `sample:one`·`"hello"`를 사용하고 정확한 함수 1회 호출 및 동일 예외의 전파를 확인한다. 테스트 환경의 예외 전파 설정을 사용하므로 미정인 운영 HTTP 500 본문이나 별도 오류 종류를 확정하지 않는다.
+- `tests/scenario_01_storage/test_http.py`의 `test_unexpected_storage_error_is_not_invalid_input`는 PUT·GET·DELETE 각각의 저장소 함수에 `RuntimeError`를 설정한 3개다. 유효한 기존 입력 `sample:one`·`"hello"`를 사용하고 정확한 함수 1회 호출 및 시험용 `PROPAGATE_EXCEPTIONS=True`에서 동일 예외의 전파를 확인한다. 실제 서버의 500 JSON 처리는 예외 전파를 끈 A06·S2-08 테스트에서 별도로 확인한다.
 
 ## 테스트 코드 연결과 실행 기록
 

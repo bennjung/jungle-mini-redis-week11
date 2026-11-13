@@ -205,3 +205,30 @@ def test_s2_08_internal_error_is_json_not_input_error():
     app.config.update(TESTING=False, PROPAGATE_EXCEPTIONS=False)
     response = app.test_client().get("/kv", query_string={"key": "counter:one"})
     check(response, 500, {"error": "INTERNAL_SERVER_ERROR"})
+
+
+@pytest.mark.parametrize("operation,initial,amount,bound", [
+    ("incr", 10 ** 309, 1.0, {}),
+    ("decr", 10 ** 309, 1.0, {}),
+    ("incr", 1e308, 1e308, {"maximum": 0}),
+    ("decr", -1e308, 1e308, {"minimum": 0}),
+])
+def test_s2_15_unrepresentable_result(connected, operation, initial, amount, bound):
+    client, store = connected
+    prepare(client, initial)
+    reject_and_preserve(client, store, operation,
+                        {"key": "counter:one", "amount": amount, **bound},
+                        422, {"error": "OUT_OF_RANGE"})
+
+
+@pytest.mark.parametrize("operation", ["incr", "decr"])
+def test_s2_15_unrepresentable_bound_literal(connected, operation):
+    client, store = connected
+    prepare(client, 10)
+    before = state(store)
+    field = "maximum" if operation == "incr" else "minimum"
+    # 1e400은 JSON 숫자 표기지만 현재 Python float로 유한하게 표현할 수 없다.
+    raw = '{"key":"counter:one","amount":1,"' + field + '":1e400}'
+    check(client.post(f"/kv/{operation}", data=raw, content_type="application/json"),
+          422, {"error": "OUT_OF_RANGE"})
+    assert_json(state(store), before)

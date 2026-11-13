@@ -34,9 +34,9 @@ python3 -m venv .venv
 
 테스트 계약은 [저장소 시나리오](resc/scenario_01_storage/01-storage-scenario.md), 명세 대조와 실행 결과는 [작업 기록](resc/scenario_01_storage/storage-test-worklog.md)을 참고한다. HTTP 구현·분리 테스트·실제 로컬 HTTP 검증은 [HTTP 담당 범위](resc/scenario_01_storage/01-http-scope.md)를 참고한다.
 
-### JSON 자료형·증감의 구현 전 테스트
+### JSON 자료형·증감 테스트
 
-[신규 테스트 케이스](resc/scenario_02_concurrent_counter/02-test-cases.md)를 참고한다. 새 계약은 아직 미구현이므로 신규 테스트는 현재 실패하며, 전체 `tests/` 실행도 모두 통과하는 상태가 아니다. 기존 숫자 거절 테스트는 기존 계약 검증으로 남아 있다. 신규 계약으로 전환할 때 관련 명세와 함께 갱신해야 한다.
+[테스트 케이스](resc/scenario_02_concurrent_counter/02-test-cases.md)를 참고한다. JSON 자료형 저장과 증감을 구현했으며, 기존 숫자·불리언·배열·객체 거절 테스트도 승인된 계약에 따라 같은 입력의 저장 성공으로 전환했다.
 
 ```sh
 .venv/bin/python -m pytest tests/scenario_01_storage/test_json_types_extension.py tests/scenario_02_concurrent_counter -q

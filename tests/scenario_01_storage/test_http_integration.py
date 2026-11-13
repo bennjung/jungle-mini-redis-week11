@@ -347,10 +347,6 @@ def test_s1_09_invalid_query_key_preserves_state(http, method, key):
 @pytest.mark.parametrize(
     "value",
     [
-        pytest.param(1, id="S1-10-01"),
-        pytest.param(True, id="S1-10-02"),
-        pytest.param([], id="S1-10-03"),
-        pytest.param({}, id="S1-10-04"),
         pytest.param("\ud800", id="S1-10-06"),
     ],
 )
@@ -368,3 +364,20 @@ def test_s1_10_invalid_json_value_preserves_state(http, value):
     request("GET", "sample:one", {"found": True, "value": "hello"})
     request("GET", "sample:two", {"found": True, "value": "world"})
     assert snapshot(store) == before
+
+
+@pytest.mark.parametrize("value", [
+    pytest.param(1, id="S1-10-01"),
+    pytest.param(True, id="S1-10-02"),
+    pytest.param([], id="S1-10-03"),
+    pytest.param({}, id="S1-10-04"),
+])
+def test_s1_10_json_value_replaces_target_only(http, value):
+    request, store = http
+    request("PUT", "sample:one", {"ok": True}, value="hello")
+    request("PUT", "sample:two", {"ok": True}, value="world")
+    request("PUT", "sample:one", {"ok": True}, value=value)
+    assert snapshot(store) == {"sample:one": value, "sample:two": "world"}
+    for _ in range(2):
+        request("GET", "sample:one", {"found": True, "value": value})
+        request("GET", "sample:two", {"found": True, "value": "world"})

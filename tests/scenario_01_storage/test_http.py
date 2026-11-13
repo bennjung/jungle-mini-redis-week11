@@ -244,7 +244,7 @@ def test_put_type_validation_delegated_to_storage(http_boundary, field, invalid_
     "method,operation", [("PUT", "set"), ("GET", "get"), ("DELETE", "delete")]
 )
 def test_unexpected_storage_error_is_not_invalid_input(http_boundary, method, operation):
-    """내부 예외를 입력 오류로 삼키지 않는다. 새 HTTP 오류 정책은 정하지 않는다."""
+    """테스트용 예외 전파 모드에서는 내부 예외를 입력 오류로 바꾸지 않는다."""
     client, storage = http_boundary
     client.application.config["PROPAGATE_EXCEPTIONS"] = True
     error = RuntimeError("unexpected storage failure")
