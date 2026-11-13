@@ -2,6 +2,8 @@
 
 ## 상태와 근거
 
+- 이 문서의 문자열·실제 `null` 범위와 기존 실행 테스트는 시나리오 01의 기준이다. JSON 자료형 확장에 대한 승인된 후속 행동·64KiB 측정 기준은 [통합 결론](../scenario_02_concurrent_counter/02-concurrent-counter-integrated-review.md), 미구현 API 계약은 [REST API 8절](../../rest-api.md), 신규 검증은 [테스트 케이스](../scenario_02_concurrent_counter/02-test-cases.md)에 구분해 기록한다. 기존 숫자 거절 테스트는 이번 테스트 작성 작업에서 임의로 변경하지 않는다.
+
 - 아래의 확정된 행동 계약은 사용자 승인 사항이다. 테스트에는 이 계약을 반영하되, 응답의 정확한 표현·호출 방식 등 미정 부분까지 확정된 것으로 간주하지 않는다.
 - 요구사항 원문: [phase.md](../phase.md)의 해시 테이블 기반 저장소, 외부 사용, API 형태, 데이터 무효화, 저장·조회·삭제 단위 테스트 및 외부 사용 기능 테스트.
 - 공통 개발 흐름: [AGENTS.md](../../AGENTS.md).

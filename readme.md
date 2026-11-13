@@ -20,7 +20,7 @@ python3 -m venv .venv
 - 종료: 실행 중인 터미널에서 `Ctrl+C`
 - 현재는 같은 컴퓨터에서만 접속할 수 있는 순차 처리 개발 서버다.
 - 데이터는 메모리에 보관하므로 서버 종료·재시작 시 사라진다.
-- 요청 방법은 [REST API 명세](resc/scenario_01_storage/rest-api.md)를 참고한다.
+- 요청 방법은 [REST API 명세](rest-api.md)를 참고한다.
 
 ## 저장소 단위 테스트
 
@@ -33,6 +33,16 @@ python3 -m venv .venv
 가상환경 활성화는 `source .venv/bin/activate`로 한다.
 
 테스트 계약은 [저장소 시나리오](resc/scenario_01_storage/01-storage-scenario.md), 명세 대조와 실행 결과는 [작업 기록](resc/scenario_01_storage/storage-test-worklog.md)을 참고한다. HTTP 구현·분리 테스트·실제 로컬 HTTP 검증은 [HTTP 담당 범위](resc/scenario_01_storage/01-http-scope.md)를 참고한다.
+
+### JSON 자료형·증감의 구현 전 테스트
+
+[신규 테스트 케이스](resc/scenario_02_concurrent_counter/02-test-cases.md)를 참고한다. 새 계약은 아직 미구현이므로 신규 테스트는 현재 실패하며, 전체 `tests/` 실행도 모두 통과하는 상태가 아니다. 기존 숫자 거절 테스트는 기존 계약 검증으로 남아 있다. 신규 계약으로 전환할 때 관련 명세와 함께 갱신해야 한다.
+
+```sh
+.venv/bin/python -m pytest tests/scenario_01_storage/test_json_types_extension.py tests/scenario_02_concurrent_counter -q
+```
+
+실제 TCP 동시 요청의 반복 횟수와 완료 한도는 아직 확정하지 않았다. `COUNTER_TEST_REPEAT`·`COUNTER_TEST_TIMEOUT`을 실행자가 지정한 경우에만 해당 테스트를 실행하며, 미지정 시 건너뛴다. 건너뛴 테스트를 검증 완료로 세지 않는다.
 
 ## 저장소 사용
 
