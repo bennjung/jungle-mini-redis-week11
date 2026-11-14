@@ -3,7 +3,7 @@
 ## 기준과 상태
 
 - 기준: [01 TTL 계약](01-ttl-contract.md), [04 날씨 TTL/LDC 결정 로그](../scenario_04_response_cache/04-weather-ttl-decision-log.md), [REST API 9절](../../rest-api.md).
-- 이 문서는 확정된 TTL 행동을 정확한 입력·관찰로 구체화한 테스트 명세 초안이다. 아래 표본은 계약을 검증하기 위한 입력이며 새 기능·정책을 추가하지 않는다. 정확한 표본을 사용자 검토 없이 동결된 계약이라고 주장하지 않는다.
+- 이 문서는 확정된 TTL 행동을 정확한 입력·관찰로 구체화한 테스트 계약이다. 아래 표본은 계약을 검증하기 위한 입력이며 새 기능·정책을 추가하지 않는다. 2026-11-14에 T1-01~18, T1-20~21, T1-23의 입력·기대를 동결했다. T1-19는 후속 timer 브랜치에서 동결한다.
 - 저장소 코어 테스트: `tests/scenario_01_storage/test_ttl_storage.py`. Active 만료 테스트: `tests/scenario_01_storage/test_ttl_active.py`. HTTP 표면 테스트: `tests/scenario_01_storage/test_ttl_http.py`. 타이머 task 테스트: `tests/scenario_01_storage/test_ttl_timer.py`(후속 timer 브랜치). 날씨 소비자 기능 테스트: `tests/scenario_04_response_cache/test_weather_cache.py`.
 - 테스트 helper: `tests/scenario_01_storage/ttl_state_helpers.py`, `tests/scenario_01_storage/ttl_clock_helpers.py`.
 - 구현 전에 테스트를 실행해 실패 원인을 확인하고, 구현 뒤 같은 테스트를 다시 실행한다. 테스트에 맞추어 TTL 계약을 완화하지 않는다.
@@ -14,10 +14,10 @@
 
 - 사전 상태는 `set`·`expire`로 만든다. `_data`·`_expires`에 직접 값을 넣지 않는다. 만료된 사전 상태는 `set(..., ttl=...)` 뒤 가짜 시계를 만료 시각 이상으로 진행해 만든다.
 - 가짜 벽시계 기준값: `BASE_MS = 1_700_000_000_000`. `advance(ms)`는 현재 값을 `ms`만큼 증가시킨다.
-- `[제안]` 테스트 주입 인터페이스: `MiniRedis(clock=clock, sampler=sampler)`.
+- `[확정]` 테스트 주입 인터페이스: `MiniRedis(clock=clock, sampler=sampler)`.
   - `clock()`은 정수 epoch ms를 반환한다. 기본값은 실제 벽시계다.
   - `sampler(keys, k)`는 `keys`에서 최대 `k`개를 반환한다. 기본값은 중복 없는 무작위 표본이다.
-  - `MiniRedis()`는 기존처럼 동작해야 한다. 이 인터페이스는 테스트 코드 작성 전에 승인한다.
+  - `MiniRedis()`는 기존처럼 동작해야 한다. 이 인터페이스는 2026-11-14에 동결했다.
 - `[확정]` active tick은 테스트에서 `_maybe_active_expire()` 또는 `_active_expire_cycle(now)`를 직접 호출해 재현한다. 실제 100ms 타이머를 기다리지 않는다. 타이머 task의 주기·유휴 실행은 T1-19(후속 timer 브랜치)에서 확인한다.
 - `snapshot(store)`는 기존처럼 `_data`의 사본을 반환한다. `ttl_snapshot(store)`는 `(_expires.copy(), list(_ttl_keys), _ttl_pos.copy())`를 반환한다. 테스트 전용이며 실행 코드의 메서드가 아니다.
 - 불변 조건 검사: `set(_expires) == set(_ttl_keys) == set(_ttl_pos)`, 모든 키의 위치 일치, 세 길이 일치, `_ttl_keys` 중복 없음.
@@ -237,7 +237,7 @@
 
 ## 실행·구현 순서
 
-1. 이 문서의 테스트 ID와 입력을 사용자 검토로 동결한다.
+1. 테스트 ID와 입력은 동결됐다(2026-11-14). T1-19는 후속 timer 브랜치에서 동결한다.
 2. 저장소 테스트를 먼저 작성하고, 구현 전에 실행해 실패 원인을 기록한다. 미정 항목은 작성하지 않는다.
 3. HTTP 표면 테스트와 날씨 소비자 테스트를 작성한다.
 4. `storage.py`의 TTL 저장·조회·삭제·lazy/active를 구현하고 같은 테스트를 다시 실행한다.

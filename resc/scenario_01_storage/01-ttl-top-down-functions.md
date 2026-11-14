@@ -5,7 +5,7 @@
 - 기준: [01 TTL 계약](01-ttl-contract.md), [01 TTL 테스트 계약](01-ttl-test-cases.md), [REST API 9절](../../rest-api.md), [04 날씨 TTL/LDC 결정 로그](../scenario_04_response_cache/04-weather-ttl-decision-log.md).
 - 이 문서는 TTL 기능을 기존 `app.py` → `storage.py` 흐름에 배치하고, 테스트 작성부터 구현까지 3인 분업 경계를 정하는 설계 초안이다.
 - `[확정]` 2026-11-14 구현 범위: 01 TTL 전체(저장소 코어·active tick·HTTP 표면·`incr`/`decr` lazy)와 04 날씨 소비자 테스트(T1-21)까지를 한 조각으로 구현한다. 타이머 task와 T1-19는 후속 timer 브랜치에서 한다. 03 성능 재측정·대량 무효화는 제외하고, 원본 API 실패 응답은 MiniRedis 범위가 아니므로 다루지 않는다.
-- 함수 이름·인자·내부 helper 이름은 `[제안]`이다. 테스트 코드 작성 전에 이 계약을 동결한다.
+- 함수 이름·인자·내부 helper 이름은 2026-11-14에 동결했다. 이후 변경은 계약 수정과 사용자 확인을 거친다.
 - `[미정]` 항목은 구현으로 확정하지 않는다. 담당 범위의 테스트를 작성하기 전에 사용자 확인을 받는다.
 - 새 계층·큐·잠금·별도 저장소를 만들지 않는다. 기존 `create_app(storage)`와 단일 `MiniRedis` 인스턴스, 단일 이벤트 루프·`uvicorn workers=1` 서버를 유지한다.
 
@@ -132,7 +132,7 @@ lifespan 타이머 task — app.py (후속 timer 브랜치)
 
 ### 3.2 생성자·시계·표본
 
-`[제안]` 기존 `MiniRedis()` 호출을 유지하면서 테스트 주입을 허용한다.
+`[확정]` 기존 `MiniRedis()` 호출을 유지하면서 테스트 주입을 허용한다.
 
 ```python
 class MiniRedis:
@@ -145,7 +145,7 @@ class MiniRedis:
 - `clock()`은 정수 epoch ms를 반환한다. `None`이면 실제 벽시계를 쓴다.
 - `sampler(keys, k)`는 현재 TTL 키에서 최대 `k`개를 반환한다. `None`이면 C의 active 코드가 기본 표본을 쓴다.
 - `MiniRedis()`는 기존 동작과 호환되어야 한다.
-- 이 인터페이스는 테스트 코드 작성 전에 동결한다.
+- 이 인터페이스는 테스트 코드 작성 전에 동결했다(2026-11-14).
 
 ### 3.3 내부 helper 계약
 
@@ -339,12 +339,12 @@ def _active_expire_cycle(self, now_ms):
 | `ttl_snapshot`·`assert_ttl_invariants` | T1-01~13 | B |
 | lifespan 타이머 task | T1-19 (후속 timer 브랜치) | 후속 |
 
-## 8. 동결 전 확인
+## 8. 동결 결과
 
-- `[제안]` `MiniRedis(clock=None, sampler=None)` 인터페이스.
+- `[확정]` `MiniRedis(clock=None, sampler=None)` 인터페이스. `clock()`은 정수 epoch ms, `sampler(keys, k)`는 최대 `k`개를 반환하고 기본값은 실제 벽시계·`random.sample`이다.
 - `[확정]` active 만료는 lifespan의 100ms 주기 타이머가 실행한다(D-24). public 메서드는 active를 호출하지 않는다. 타이머 task 구현과 T1-19는 후속 timer 브랜치에서 하고, 이번 조각은 tick 함수까지다.
 - `[확정]` 표본은 중복 없이 뽑는다(`random.sample`). 키가 20개 미만이면 전체를 검사한다.
-- `[제안]` 테스트 파일 분담: `test_ttl_storage.py`(B), `test_ttl_active.py`(C), `test_ttl_http.py`·`test_weather_cache.py`(A). 타이머 task 시험은 후속 `test_ttl_timer.py`(A).
+- `[확정]` 테스트 파일 분담: `test_ttl_storage.py`(B), `test_ttl_active.py`(C), `test_ttl_http.py`·`test_weather_cache.py`(A). 타이머 task 시험은 후속 `test_ttl_timer.py`(A).
 - `[확정]` `incr`·`decr`는 lazy 만료 검사를 하고, 만료된 키는 `NOT_FOUND`, 살아 있는 키의 TTL은 유지한다(T1-23).
 - `[확정]` `POST /kv/expire`·`POST /kv/persist`는 계약 필드 외 추가 필드를 무시한다. `PUT /kv`와 같고, `incr`/`decr`의 거절 규칙과 구분한다.
 - `[확정]` 원본 API 실패는 MiniRedis 계약 범위가 아니다. 소비자 책임이며 이 테스트 범위에 넣지 않는다.

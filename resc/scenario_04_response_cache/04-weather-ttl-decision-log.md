@@ -519,6 +519,7 @@ weather:35.179:129.075
 | D-25 | 2026-11-14 | `incr`·`decr`는 lazy 만료 검사를 하고, 만료된 키는 `NOT_FOUND`, 살아 있는 키의 TTL은 유지한다. | Redis의 INCR/DECR 방향과 02의 없는 키 `NOT_FOUND` 계약 유지 | `01-ttl-contract.md`, `01-ttl-test-cases.md`, `storage.py`, 테스트 | `[확정]` |
 | D-26 | 2026-11-14 | `POST /kv/expire`·`POST /kv/persist`는 계약 필드 외 추가 필드를 무시한다. `POST /kv/incr`·`POST /kv/decr`의 알 수 없는 필드 거절은 유지한다. | 기존 `PUT /kv` 정책과 일관, 조건 필드의 조용한 무시 방지 규칙과 구분 | `rest-api.md`, `01-ttl-contract.md`, 테스트 | `[확정]` |
 | D-27 | 2026-11-14 | 원본 API 실패는 MiniRedis 계약 범위가 아니다. MiniRedis는 원본 호출을 모르며, 실패 응답·캐시 저장 여부는 소비자 앱의 책임이다. 04 테스트에서 실패 주입을 제외한다. | 외부 API와 캐시 저장소의 책임 경계 | `04-response-cache-scenario.md`, `01-ttl-contract.md`, `01-ttl-test-cases.md`, 테스트 | `[확정]` |
+| D-28 | 2026-11-14 | 테스트 주입 인터페이스 `MiniRedis(clock=None, sampler=None)`와 TTL 테스트 입력(T1-01~18, 20~21, 23)을 동결한다. T1-19는 timer 브랜치에서 동결한다. | 결정적 시계·표본 주입과 계약 우선 테스트 검증 | `01-ttl-top-down-functions.md`, `01-ttl-test-cases.md`, 테스트 | `[확정]` |
 
 - 이 표에는 합의된 결정만 추가한다. `[제안]`·`[미정]` 항목은 결정이 난 뒤 날짜와 근거를 붙여 추가한다.
 - 결정이 바뀌면 기존 행을 지우지 않고 새 행에 변경 이유를 적는다.
