@@ -7,7 +7,7 @@
 - REST API 명세 8절의 JSON 자료형 지원·증감을 구현했다. 아래 과거 실행 결과는 당시 문자열·실제 `null` 기준의 검증 이력이며, 현재 확장 검증은 신규 테스트와 구분한다.
 - 신규 자료형·증감의 [테스트 케이스](../scenario_02_concurrent_counter/02-test-cases.md)는 기존 137개 통과 기록과 구분한다. HTTP 시험 클라이언트 경로와 실제 TCP 동시 요청의 실행 범위를 혼동하지 않는다.
 - 담당: 찬. 범위는 문서 01 전체 중 HTTP 요청 해석·JSON 및 본문 구조·필수 필드 검사·저장소 호출·HTTP 응답 생성이다. S1-01 하나로 한정하지 않는다.
-- 구현 언어는 Python, 웹 프레임워크는 Flask로 선정했다. Flask로 현재 계약을 충족할 수 있고 팀원이 사용 경험을 갖고 있어, 현재 요구를 위해 다른 프레임워크를 도입할 이유가 없다.
+- 구현 언어는 Python, 웹 프레임워크는 FastAPI로 전환했다. FastAPI/ASGI는 앱 lifecycle(`lifespan`)에서 TTL active cleanup의 주기 실행 자리를 소유할 수 있고, 현재 HTTP 계약을 그대로 충족한다. Flask/WSGI에서의 전환 배경·범위·비목표는 [마이그레이션 설계](../fastapi-migration-design.md)를 따른다.
 - 아래는 기존 테스트에서 HTTP 담당 검증을 분리한 문서다. 새 행동 계약이나 저장소 내부 설계를 추가하지 않는다.
 - 테스트 도구는 pytest다. HTTP 앱은 `app.py`의 `create_app(storage)`로 저장소를 전달받는다. 분리 테스트는 [tests/scenario_01_storage/test_http.py](../../tests/scenario_01_storage/test_http.py), 실제 저장소·로컬 TCP HTTP 통합 테스트는 [tests/scenario_01_storage/test_http_integration.py](../../tests/scenario_01_storage/test_http_integration.py)에 둔다. 실제 저장소는 `storage.py`의 `MiniRedis()`이며 `python app.py`로 연결해 실행한다.
 - 실행 상태: HTTP 경계 44개·저장소 단위 54개·로컬 TCP HTTP 시나리오 37개·실행 진입점 1개·실제 서버 프로세스 1개, 총 137개가 모두 통과했다. `python app.py`로 서버를 직접 실행하고 실제 HTTP 11요청의 응답과 서버 종료를 확인하는 자동화 테스트를 포함한다. 운영 배포·다른 기기에서의 접근·동시성 검증은 포함하지 않는다.
@@ -33,7 +33,7 @@
 - 조회·삭제의 `found=False`는 HTTP 200이며 `value` 필드를 추가하지 않는다. `found=True`인 `None`은 `value:null`로 표현한다.
 - 키·문자열 `value`의 UTF-8 바이트 제한 검증은 저장소 책임이다. HTTP에서 요청 전체 길이나 글자 수로 대체 판정하지 않는다.
 - 삭제 결과를 만들기 위해 HTTP가 먼저 `get`을 호출하지 않는다. 삭제 직전 `value`와 존재 여부는 `delete` 반환을 따른다.
-- 같은 저장소를 사용하는 요청은 공유 상태를 참조한다. 요청마다 새 저장소를 만들지 않는다. 실행 진입점에서 `MiniRedis()`를 한 번 생성해 `create_app(storage)`에 전달한다. 현재 실행 경로는 로컬 검증을 위한 단일 프로세스·순차 요청 처리이며 일반적인 동시 호출 조건은 확정하지 않는다.
+- 같은 저장소를 사용하는 요청은 공유 상태를 참조한다. 요청마다 새 저장소를 만들지 않는다. 실행 진입점에서 `MiniRedis()`를 한 번 생성해 `create_app(storage)`에 전달한다. 현재 실행 경로는 로컬 검증을 위한 단일 프로세스·단일 이벤트 루프(`uvicorn workers=1`)이며 일반적인 동시 호출 조건은 확정하지 않는다.
 - 예상하지 못한 예외를 일괄적으로 `INVALID_INPUT`으로 변환하지 않는다.
 - HTTP는 PUT 본문이 해석 가능한 JSON 객체인지, `key`·`value` 필드가 존재하는지 검사한다. GET·DELETE는 쿼리 `key` 존재 여부를 검사한다. 오류는 저장소 호출 없이 HTTP 400과 `{"error":"INVALID_INPUT"}`으로 응답한다. 필드가 존재하는 `null`·빈 문자열·다른 타입은 HTTP가 걸러내지 않고 저장소에 전달한다.
 
@@ -156,8 +156,8 @@
 
 ### 파일과 함수
 
-- `app.py`: Flask 앱 생성과 요청 처리만 둔다. 별도 경로 등록 모듈·서비스 계층·저장소 구현을 추가하지 않는다.
-- `create_app(storage)`: Flask 앱을 만들고 아래 세 경로를 등록한 뒤 앱을 반환한다. 전달받은 저장소를 세 처리 함수가 함께 사용한다. 실제 저장소를 생성하거나 가져오는 책임은 두지 않는다.
+- `app.py`: FastAPI 앱 생성과 요청 처리만 둔다. 별도 경로 등록 모듈·서비스 계층·저장소 구현을 추가하지 않는다.
+- `create_app(storage)`: FastAPI 앱을 만들고 01 범위의 세 경로를 등록한 뒤 앱을 반환한다. 전달받은 저장소를 세 처리 함수가 함께 사용한다. 실제 저장소를 생성하거나 가져오는 책임은 두지 않는다.
 - `put_kv()`: `PUT /kv` 처리. JSON 본문을 해석하고 `key`·`value`를 `storage.set(key, value)`에 전달한다.
 - `get_kv()`: `GET /kv` 처리. 해석된 쿼리의 `key`를 `storage.get(key)`에 전달한다.
 - `delete_kv()`: `DELETE /kv` 처리. 해석된 쿼리의 `key`를 `storage.delete(key)`에 전달한다. 사전 조회하지 않는다.
@@ -165,14 +165,14 @@
 
 ### 요청 해석과 응답
 
-- PUT 본문은 Flask의 `request.get_json()`으로 해석한다. 이미 해석된 문자열 내부를 다시 해석하지 않는다.
-- GET·DELETE의 키는 Flask가 URL 해석한 `request.args`에서 읽는다. 별도의 재해석이나 문자열 정규화를 하지 않는다.
+- PUT 본문은 `await request.json()`으로 해석하고, `json.JSONDecodeError`·`UnicodeDecodeError`는 400 `INVALID_INPUT`으로 거절한다. 이미 해석된 문자열 내부를 다시 해석하지 않는다.
+- GET·DELETE의 키는 Starlette가 URL 해석한 `request.query_params.get("key")`에서 읽는다. 별도의 재해석이나 문자열 정규화를 하지 않는다.
 - 명시적 JSON `null`은 `None`으로 전달한다. 필드 누락은 HTTP가 저장소 호출 없이 400·`INVALID_INPUT`으로 거절하고, 실제 `None`으로 대체하지 않는다.
 - HTTP JSON·본문 구조·필수 필드 검사를 통과한 경우에만 해당 저장소 함수를 한 번 호출한다. 타입·크기 검사와 저장소 결과 재구성은 하지 않는다.
-- 저장소 결과가 `{"error": "INVALID_INPUT"}`이면 상태 코드 400, 합의된 정상 결과이면 200이다. 결과 사전과 상태 코드를 반환하여 Flask가 JSON 응답을 만들게 한다.
+- 저장소 결과가 `{"error": "INVALID_INPUT"}`이면 상태 코드 400, 합의된 정상 결과이면 200이다. 결과 사전과 상태 코드를 `JSONResponse`에 전달해 JSON 응답을 만든다.
 - 정상 결과의 `found`·`value`·`ok`를 새로 계산하거나 필드를 추가하지 않는다. 키 없음과 실제 `None`인 `value`를 구분한다.
 - 공통 응답 처리는 세 함수 안의 짧은 동일 처리로 둔다. 이 단계에서 별도 응답 변환 함수·예외 계층은 추가하지 않는다.
-- 광범위한 예외 처리는 두지 않는다. JSON 해석 호출에서 발생한 `BadRequest`만 400 JSON으로 바꾸며, 본문 구조·필수 필드는 조건문으로 검사한다. 저장소 호출은 예외 처리 범위 밖에 두어 내부 오류를 입력 오류로 숨기지 않는다.
+- 광범위한 예외 처리는 두지 않는다. `await request.json()`에서 발생한 `json.JSONDecodeError`·`UnicodeDecodeError`만 400 JSON으로 바꾸며, 본문 구조·필수 필드는 조건문으로 검사한다. 저장소 호출은 예외 처리 범위 밖에 두어 내부 오류를 입력 오류로 숨기지 않는다.
 
 ### 승인된 형식 오류 처리
 
@@ -205,17 +205,17 @@
 - `app.py`의 실행 분기 `if __name__ == "__main__"`에서 `MiniRedis`를 가져와 한 번 생성하고 `create_app`에 전달한다. 기존 `create_app(storage)`와 세 API 함수·저장소 구현은 변경하지 않는다.
 - 실행 환경 준비: `python3 -m venv .venv`, `.venv/bin/python -m pip install -r requirements-dev.txt`.
 - 서버 실행: `.venv/bin/python app.py`. 주소는 `http://127.0.0.1:5000`이다. 종료는 실행 터미널에서 중단한다.
-- `threaded=False`, `use_reloader=False`로 순차 검증 경로를 명시한다. Flask 내장 개발 서버이며 운영 배포 서버가 아니다. 다른 기기로 노출하거나 동시 호출 안전성을 보장하지 않는다. 데이터는 프로세스 메모리에만 있고 종료 후 보존하지 않는다.
+- `uvicorn.run(..., workers=1)`로 단일 프로세스·단일 이벤트 루프 검증 경로를 명시한다. uvicorn 개발 서버이며 운영 배포 서버가 아니다. 다른 기기로 노출하거나 동시 호출 안전성을 보장하지 않는다. 데이터는 프로세스 메모리에만 있고 종료 후 보존하지 않는다.
 - 전체 검증: `.venv/bin/python -m pytest tests/ -q`. 실제 소켓을 사용하므로 테스트 환경에서 로컬 주소에 임시 포트를 열 수 있어야 한다.
 
 ### 실제 HTTP 통합 테스트 계약
 
-- `tests/scenario_01_storage/test_http_integration.py`의 `http` 준비 함수는 매 테스트마다 새 `MiniRedis()`를 `create_app`에 전달하고 `127.0.0.1`의 운영체제가 배정한 임시 포트에서 서버를 시작한다. 요청 처리는 순차이며 테스트 종료 시 서버·스레드·소켓을 정리한다.
+- `tests/scenario_01_storage/test_http_integration.py`의 `http` 준비 함수는 매 테스트마다 새 `MiniRedis()`를 `create_app`에 전달하고 `127.0.0.1`의 운영체제가 배정한 임시 포트에서 서버를 시작한다. 요청 처리는 단일 이벤트 루프에서 이루어지며 테스트 종료 시 서버·스레드·소켓을 정리한다.
 - 요청은 Python 표준 HTTP 클라이언트로 실제 TCP를 통과한다. PUT 본문은 JSON, GET·DELETE 키는 URL 인코딩한 쿼리이며 다음 요청 전에 상태 코드·JSON 필드·타입·내용을 검증한다. 저장소 반환을 미리 지정하거나 저장소 함수를 대체하지 않는다.
 - `test_s1_01`~`test_s1_08_01`에 원본 S1-01~08의 순서·입력·기대 결과를 연결한다. S1-07의 11행을 포함한 20개 시나리오다. 각 사전 상태도 실제 PUT 요청으로 준비하며 저장 성공 응답을 확인한다.
 - S1-07의 상태 보존·무효 항목 비생성은 실제 HTTP 요청 전후의 기존 테스트 전용 `snapshot(store)`로 추가 관찰한다. 내부 스냅샷 관찰과 외부 HTTP 응답 검증을 구분하며 스냅샷을 API에 노출하지 않는다.
 - 원본 S1-09·10의 33개 저장소 단위 테스트는 모두 유지한다. 이 중 JSON·URL로 원래 타입과 내용을 보존할 수 있는 조합 17개는 아래와 같이 실제 HTTP로도 확인한다. Python 전용 입력을 다른 HTTP 입력으로 임의 변환하지 않는다.
-- `test_script_entrypoint_connects_real_storage`는 실행 분기를 호출하고 서버 시작 호출만 기록하여 주소·순차 설정과 실제 저장소 연결을 검사한다. 이 테스트 자체는 네트워크 검증이 아니며 TCP 시나리오 37개와 별도 구분한다.
+- `test_script_entrypoint_connects_real_storage`는 실행 분기를 호출하고 서버 시작 호출만 기록하여 주소·`workers=1` 설정과 실제 저장소 연결을 검사한다. 이 테스트 자체는 네트워크 검증이 아니며 TCP 시나리오 37개와 별도 구분한다.
 - `test_script_server_responds_over_http`는 서버 시작을 대체하지 않고 현재 테스트 환경의 Python으로 `app.py`를 별도 프로세스에서 실행한다. 실제 주소 `http://127.0.0.1:5000`에 요청하며, 아래 계약과 실행 기록을 따른다.
 
 ### 실제 서버 프로세스 자동화 테스트
@@ -241,7 +241,7 @@
 | `test_s1_10_json_value_replaces_target_only` | 승인된 타입 지원에 따라 S1-10-01~04의 `1`, `true`, `[]`, `{}`를 같은 키에 PUT하고 성공·타입·다른 키 보존 확인 | 4개 |
 
 - S1-09-07의 `b"key"`와 S1-10-05의 `b"hello"`는 JSON 타입이 아니므로 단위 테스트만 유지한다. GET·DELETE 쿼리는 문자열이므로 `None`·숫자·불리언·배열·객체를 원래 Python 타입으로 전달할 수 없다. 단독 서로게이트를 정상 UTF-8 URL로 표현할 수 없으므로 그 쿼리 입력도 새로 만들지 않는다. 문자열 `"None"`·`"1"` 등으로 바꾸어 원본 케이스를 검증했다고 보고하지 않는다.
-- `tests/scenario_01_storage/test_http.py`의 `test_unexpected_storage_error_is_not_invalid_input`는 PUT·GET·DELETE 각각의 저장소 함수에 `RuntimeError`를 설정한 3개다. 유효한 기존 입력 `sample:one`·`"hello"`를 사용하고 정확한 함수 1회 호출 및 시험용 `PROPAGATE_EXCEPTIONS=True`에서 동일 예외의 전파를 확인한다. 실제 서버의 500 JSON 처리는 예외 전파를 끈 A06·S2-08 테스트에서 별도로 확인한다.
+- `tests/scenario_01_storage/test_http.py`의 `test_unexpected_storage_error_is_not_invalid_input`는 PUT·GET·DELETE 각각의 저장소 함수에 `RuntimeError`를 설정한 3개다. 유효한 기존 입력 `sample:one`·`"hello"`를 사용하고 정확한 함수 1회 호출 및 시험용 `TestClient`의 기본 설정에서 동일 예외가 전파됨을 확인한다. 실제 서버의 500 JSON 처리는 `raise_server_exceptions=False`인 A06·S2-08 테스트에서 별도로 확인한다.
 
 ## 테스트 코드 연결과 실행 기록
 
@@ -255,7 +255,7 @@
 | `test_missing_query_key_rejected_without_storage_call` | GET `/kv`, DELETE `/kv`, 쿼리 없음 | 2개 각각 400과 같은 오류 본문, 저장소 모든 함수 무호출 |
 | `test_put_type_validation_delegated_to_storage` | PUT `/kv`, 기본 본문 `{"key":"sample:one","value":"hello"}`의 `key` 또는 `value`를 각각 `10`, `true`, `[]`, `{"a":1}`로 대체 | 8개 각각 타입·내용 변환 없이 `set(key, value)` 1회만 호출. 시험용 저장소의 `INVALID_INPUT` 반환을 400과 같은 오류 본문으로 연결 |
 
-- 형식 오류 테스트는 `http_boundary`에서 Flask의 `PROPAGATE_EXCEPTIONS=False`를 사용한다. 미처리 예외를 실제 서버처럼 500 응답으로 관찰하여 기대한 400과 비교하기 위함이며, `app.py`의 예외 처리를 대체하거나 변경하지 않는다.
+- 형식 오류 테스트는 `http_boundary`에서 `TestClient(..., raise_server_exceptions=False)`를 사용한다. 미처리 예외를 실제 서버처럼 500 응답으로 관찰하여 기대한 400과 비교하기 위함이며, `app.py`의 예외 처리를 대체하거나 변경하지 않는다.
 - 타입 전달 테스트는 HTTP가 타입을 검사하지 않음을 검증한다. 실제 저장소가 해당 타입을 거절하는지는 별도 단위 테스트에서 확인한다. 실제 `null`과 필드 누락의 구분은 기존 S1-08과 새 누락 테스트를 함께 대조한다.
 
 ### 기존 테스트 연결과 실행 이력
@@ -263,7 +263,7 @@
 - `tests/scenario_01_storage/test_http.py`의 `test_s1_01`~`test_s1_08_01` 접두사 함수가 해당 원본 ID에 대응한다. S1-07은 `test_s1_07_input_boundaries`의 매개변수 11행으로 나누며 각 행에 원본 ID를 붙인다. 원본 시나리오의 실행 항목은 20개다.
 - `test_storage_invalid_input_maps_to_http_400`은 GET·DELETE 두 경우를 검증한다. 요청 키는 기존 `sample:one`을 사용하고 시험용 `get`·`delete` 반환을 `{"error":"INVALID_INPUT"}`으로 설정하여 정확한 호출과 HTTP 400·오류 본문을 확인한다. 이는 해당 키가 무효하다는 뜻이 아니며 저장소의 거절 입력 정책을 정하지 않는다. 원본 S1-07에 길이 초과 키 조회·삭제를 추가한 것이 아니다. 사전 저장 상태에 의존하지 않는 함수 반환 연결 테스트다. 기존 실행 항목은 22개이며 형식 오류·타입 전달 19개와 내부 예외 3개를 포함한 현재 HTTP 분리 테스트는 44개다.
 - `exchange`는 Python 기본 `unittest.mock.Mock`으로 `set`·`get`·`delete`만 제공한다. 저장 상태나 크기 판정 로직을 구현하지 않고 요청마다 합의된 반환을 설정한다.
-- 각 요청은 실제 Flask `test_client()`를 거친다. 본문·쿼리 해석 후 저장소 호출 인자와 호출 횟수, 다른 함수의 추가 호출이 없는지 확인한다. 반환에 대한 HTTP 상태 코드·JSON 필드·타입·내용을 다음 요청 전에 검증한다.
+- 각 요청은 실제 FastAPI `TestClient`를 거친다. 본문·쿼리 해석 후 저장소 호출 인자와 호출 횟수, 다른 함수의 추가 호출이 없는지 확인한다. 반환에 대한 HTTP 상태 코드·JSON 필드·타입·내용을 다음 요청 전에 검증한다.
 - 크기 경계와 상태 관련 반환은 저장소의 올바른 동작을 가정한 HTTP 검증이다. 실제 크기 검사·덮어쓰기·삭제·상태 보존을 증명하지 않는다.
 - 최초 기본 환경에서는 pytest 9.0.2를 확인했으며 Flask는 설치되지 않았다. 검증용 임시 가상환경 `/tmp/opencode/mini-redis-http-gm9b_rjm`에 Flask 3.1.3과 pytest 9.2.0을 설치했다. Python은 3.14.10이다. 프로젝트의 버전 고정 결정은 아니다.
 - 수집 명령: `python3 -m pytest tests/scenario_01_storage/test_http.py --collect-only -q` → 20개 수집.
@@ -274,17 +274,25 @@
 - 이후 승인된 책임 분리: HTTP는 JSON·본문 구조·필수 필드, 저장소는 타입·크기를 검사한다. 이 단계에서는 문서만 수정했다. 기존 22개 테스트는 HTTP 형식 오류의 통일된 응답·저장소 무호출을 검사하지 않는다.
 - 위 추가 테스트 작성 후 실행: `PYTHONDONTWRITEBYTECODE=1 /tmp/opencode/mini-redis-http-gm9b_rjm/bin/python -m pytest tests/scenario_01_storage/test_http.py -q --tb=short -p no:cacheprovider` → 30개 통과·11개 검증 실패. 기존 22개와 새 타입 전달 8개는 통과했다. 형식 오류 11개 모두 저장소 무호출 검증은 통과했지만 응답 계약에서 실패했다. 잘못된 JSON·GET/DELETE 쿼리 누락 3개는 400이지만 JSON이 아니며, 객체가 아닌 본문·PUT 필드 누락 8개는 400 대신 500이다. 준비 단계 오류가 아니라 실제 응답에 대한 검증 실패다. `app.py`와 기존 22개 테스트는 변경하지 않았다.
 - HTTP 형식 오류 처리 구현 후 실행: `PYTHONDONTWRITEBYTECODE=1 /tmp/opencode/mini-redis-http-gm9b_rjm/bin/python -m pytest tests/scenario_01_storage/test_http.py -q -p no:cacheprovider` → 41개 통과. 테스트 코드·입력·기대 결과는 변경하지 않았다. JSON·본문 구조·필수 필드 오류의 400 JSON 및 저장소 무호출, 기존 정상 흐름과 타입 전달을 확인했다.
-- 원격 `28ee569` 병합 충돌 해결 후 실행: `PYTHONDONTWRITEBYTECODE=1 /tmp/opencode/mini-redis-http-gm9b_rjm/bin/python -m pytest tests/ -q -p no:cacheprovider` → 총 95개 통과(HTTP 41개·저장소 54개). S1-09·10과 저장소 테스트를 보존했다. `requirements-dev.txt`에는 기존 pytest 항목과 HTTP 테스트에 필요한 Flask를 함께 둔다. 두 테스트 묶음을 같이 실행한 것이며 실제 저장소를 연결한 HTTP 통합 테스트를 추가한 것은 아니다.
+- 원격 `28ee569` 병합 충돌 해결 후 실행: `PYTHONDONTWRITEBYTECODE=1 /tmp/opencode/mini-redis-http-gm9b_rjm/bin/python -m pytest tests/ -q -p no:cacheprovider` → 총 95개 통과(HTTP 41개·저장소 54개). S1-09·10과 저장소 테스트를 보존했다. 당시 `requirements-dev.txt`에는 기존 pytest 항목과 HTTP 테스트에 필요한 Flask를 함께 두었다. 두 테스트 묶음을 같이 실행한 것이며 실제 저장소를 연결한 HTTP 통합 테스트를 추가한 것은 아니다.
 - 저장소 연결 구현 전 `tests/scenario_01_storage/test_http_integration.py` 실행 → 로컬 TCP HTTP 시나리오 20개 통과·실행 진입점 1개 실패. 실제 `create_app(MiniRedis())` 연결은 동작하지만 `python app.py`의 서버 시작 분기가 없음을 검증 실패로 확인했다.
 - 실행 분기 추가 후 전체 실행: `PYTHONDONTWRITEBYTECODE=1 /tmp/opencode/mini-redis-http-gm9b_rjm/bin/python -m pytest tests/ -q -p no:cacheprovider` → 116개 통과. 기존 테스트 입력·기대 결과는 변경하지 않았다.
 - 실제 실행 확인: 임시 가상환경의 Python으로 `app.py`를 별도 프로세스로 시작하고 `127.0.0.1:5000`에 `sample:one`·`"hello"`로 PUT → GET → GET → DELETE → GET을 요청했다. 5개 모두 HTTP 200 및 각각 합의한 성공·조회·삭제·없음 본문을 확인한 뒤 해당 서버 프로세스를 종료했다.
 - 명세 대조 후 S1-09·10 실제 HTTP 17개·예상하지 못한 내부 예외 3개 추가 후 실행: `PYTHONDONTWRITEBYTECODE=1 /tmp/opencode/mini-redis-http-gm9b_rjm/bin/python -m pytest tests/ -q -p no:cacheprovider` → 136개 통과. `app.py`·`storage.py`와 기존 테스트의 입력·기대 결과는 변경하지 않았다.
 - 실제 서버 프로세스 테스트 추가 후 해당 테스트를 단독 실행하여 1개 통과를 확인했다. 이어 같은 환경에서 전체 `tests/`를 다시 실행하여 137개 통과를 확인했다. 두 실행 모두 서버 프로세스·로그 수신 스레드를 종료했으며 `app.py`·`storage.py`는 변경하지 않았다.
 
+### FastAPI 전환 실행 기록
+
+- 위 실행 이력은 모두 Flask·Werkzeug 서버 기준의 과거 기록이다. FastAPI/uvicorn 전환 결과로 바꾸지 않는다.
+- 전환 범위·계약은 [마이그레이션 설계](../fastapi-migration-design.md)를 따른다. `app.py`는 FastAPI `create_app(storage)`·`JSONResponse`·exception handler·`uvicorn.run(workers=1)`로 바뀌고, HTTP 테스트는 `fastapi.testclient.TestClient`와 uvicorn `Server` fixture를 쓴다. 경로·상태 코드·JSON 필드·검증 책임은 위 계약과 같다.
+- 2026-11-14 FastAPI 전환 실행: `COUNTER_TEST_REPEAT=1 COUNTER_TEST_TIMEOUT=5 .venv/bin/python -m pytest tests/ -q` → **561 passed, 30 skipped, 1 warning**. 30 skipped는 `scenario_03` JMeter/MySQL 환경 게이트다. warning은 `httpx2` deprecation 1건이며 실패가 아니다.
+- FastAPI 전환의 lifespan은 현재 no-op이다. TTL active cleanup task는 TTL 구현 단계에서 연결한다.
+- 위 137개 기록은 Flask 기준 역사이며, FastAPI 결과로 바꾸지 않는다. 아직 실행하지 않은 검증을 통과로 보고하지 않는다.
+
 ## 아직 결정하지 않은 실행 설계
 
-- Python·Flask 버전.
-- 운영 배포용 서버·실행 설정. 현재는 로컬 순차 검증용 Flask 개발 서버만 연결했다.
-- 원본의 미정 입력·오류 정책과 동시 호출 조건. Flask 기본값으로 자동 확정하지 않는다.
+- Python·FastAPI·uvicorn 버전.
+- 운영 배포용 서버·실행 설정. 현재는 로컬 검증용 uvicorn 개발 서버(`workers=1`, 단일 이벤트 루프)만 연결했다.
+- 원본의 미정 입력·오류 정책과 동시 호출 조건. FastAPI·uvicorn 기본값으로 자동 확정하지 않는다.
 
 HTTP 담당 검증 통과, 저장소 단위 테스트 통과, 실제 외부 기능 테스트 통과는 각각 구분하여 보고한다. 현재 HTTP 경계 44개·저장소 단위 54개·실제 로컬 TCP HTTP 37개·실행 진입점 1개·실제 서버 프로세스 1개가 통과했다. 모든 Python 전용 입력을 HTTP로 검증했다고 보고하지 않는다. 로컬 네트워크 경로 검증을 다른 기기에서의 접근·운영 배포·동시 호출 안전성·재시작 보존 검증으로 간주하지 않는다.

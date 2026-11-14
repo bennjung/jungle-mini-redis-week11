@@ -2,6 +2,8 @@
 
 from copy import deepcopy
 
+from fastapi.testclient import TestClient
+
 from app import create_app
 from storage import MiniRedis
 from tests.scenario_01_storage.storage_helpers import snapshot
@@ -28,10 +30,12 @@ def assert_json(actual, expected):
 
 def check(response, status, expected):
     assert response.status_code == status, (
-        "HTTP 상태 불일치", response.status_code, status, response.get_data(as_text=True)[:300],
+        "HTTP 상태 불일치", response.status_code, status, response.text[:300],
     )
-    assert response.is_json, ("JSON 응답 아님", response.content_type)
-    assert_json(response.get_json(), expected)
+    assert response.headers["content-type"].startswith("application/json"), (
+        "JSON 응답 아님", response.headers.get("content-type"),
+    )
+    assert_json(response.json(), expected)
 
 
 def state(store):
@@ -40,19 +44,17 @@ def state(store):
 
 def connected_client():
     store = MiniRedis()
-    app = create_app(store)
-    app.config["TESTING"] = True
-    return app.test_client(), store
+    return TestClient(create_app(store)), store
 
 
 def put(client, key, value):
     response = client.put("/kv", json={"key": key, "value": value})
     assert response.status_code == 200, (
-        "사전 상태 준비 PUT 실패", key, response.status_code, response.get_json()
+        "사전 상태 준비 PUT 실패", key, response.status_code, response.json()
     )
     check(response, 200, {"ok": True})
 
 
 def read_twice(client, key, expected):
     for _ in range(2):
-        check(client.get("/kv", query_string={"key": key}), 200, expected)
+        check(client.get("/kv", params={"key": key}), 200, expected)

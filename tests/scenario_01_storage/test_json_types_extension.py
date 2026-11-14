@@ -38,7 +38,7 @@ def exchange(request):
             if method == "PUT":
                 response = client.put("/kv", json={"key": key, "value": value})
             else:
-                response = client.open("/kv", method=method, query_string={"key": key})
+                response = client.request(method, "/kv", params={"key": key})
             check(response, status, expected)
 
     return call, store
@@ -108,8 +108,11 @@ def test_j1_03_request_format_does_not_count():
     assert len(compact.encode("utf-8")) == 65_534
     raw = json.dumps({"key": "sample:json", "value": value}, ensure_ascii=True, indent=4)
     assert len(raw.encode("utf-8")) > 65_536
-    check(client.put("/kv", data=raw, content_type="application/json"), 200, {"ok": True})
-    check(client.get("/kv", query_string={"key": "sample:json"}),
+    check(
+        client.put("/kv", content=raw, headers={"Content-Type": "application/json"}),
+        200, {"ok": True},
+    )
+    check(client.get("/kv", params={"key": "sample:json"}),
           200, {"found": True, "value": value})
 
 

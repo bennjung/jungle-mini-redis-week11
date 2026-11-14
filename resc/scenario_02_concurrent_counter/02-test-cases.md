@@ -5,10 +5,10 @@
 - 기준: [통합 결론](02-concurrent-counter-integrated-review.md), [함수 흐름](02-top-down-functions.md), [REST API 8절](../../rest-api.md).
 - 이 문서는 합의한 행동을 정확한 입력과 관찰로 구체화한 테스트 명세 초안이다. 아래 구체적인 표본은 계약을 검증하기 위한 입력이며 새 기능·정책을 추가하지 않는다. 새 테스트의 정확한 표본을 사용자 검토 없이 동결된 계약이라고 주장하지 않는다.
 - 구현 전 테스트 실패를 확인한 뒤 `app.py`·`storage.py`에 계약을 구현했다. 기존 S1-10-01~04는 승인된 JSON 확장에 따라 같은 입력의 저장 성공으로 전환했으며, bytes·UTF-8 인코딩 불가능 문자열의 거절은 유지한다. 구현에 맞추어 새 계약을 완화하지 않는다.
-- #1 테스트: `tests/scenario_01_storage/test_json_types_extension.py`. 저장소는 기존 `MiniRedis.set/get/delete`, HTTP는 `create_app(MiniRedis()).test_client()`의 실제 저장소 연결 경로를 사용한다.
+- #1 테스트: `tests/scenario_01_storage/test_json_types_extension.py`. 저장소는 기존 `MiniRedis.set/get/delete`, HTTP는 `TestClient(create_app(MiniRedis()))`의 실제 저장소 연결 경로를 사용한다.
 - 증감 연결 테스트: `tests/scenario_02_concurrent_counter/test_counter_http.py`. 승인된 외부 요청을 실제 저장소와 연결해 검증한다. 범위별 단위 테스트와 함께 유지한다.
 - 범위별 독립 테스트: 자료형 저장은 J1-01~04의 `storage` 매개변수와 직접 입력 거절 테스트, HTTP 경계는 `test_counter_http_boundary.py`, 저장소 증감은 `test_counter_storage.py`를 사용한다. 독립 테스트의 입력·호출·판정은 아래 A·C 절을 따른다.
-- 실제 TCP 동시 요청: `tests/scenario_02_concurrent_counter/test_counter_concurrent.py`. 단일 프로세스·`threaded=False` 서버를 사용한다. 반복 횟수와 완료 한도는 미정이므로 환경 변수 `COUNTER_TEST_REPEAT`·`COUNTER_TEST_TIMEOUT`을 명시한 실행만 수행하며 기본값을 임의로 정하지 않는다. 이는 테스트 실행 입력이지 서버 설정이나 확정된 수용 기준이 아니다. 미지정 시 건너뛰고 미검증으로 기록한다.
+- 실제 TCP 동시 요청: `tests/scenario_02_concurrent_counter/test_counter_concurrent.py`. 단일 프로세스·단일 이벤트 루프(`uvicorn workers=1`) 서버를 사용한다. 반복 횟수와 완료 한도는 미정이므로 환경 변수 `COUNTER_TEST_REPEAT`·`COUNTER_TEST_TIMEOUT`을 명시한 실행만 수행하며 기본값을 임의로 정하지 않는다. 이는 테스트 실행 입력이지 서버 설정이나 확정된 수용 기준이 아니다. 미지정 시 건너뛰고 미검증으로 기록한다.
 - HTTP 시험 클라이언트 테스트는 실제 TCP·외부 장치 검증을 대체하지 않는다. 모든 테스트는 새 저장소에서 실행하고 서버는 종료한다. 실패를 통과시키기 위한 `xfail`이나 자동 재시도는 사용하지 않는다.
 
 ## 공통 절차와 관찰
@@ -157,13 +157,13 @@ S2-01과 같은 준비·입력 형태로 각 행을 독립 실행한다.
 
 ## S2-08. 내부 오류의 HTTP 경계
 
-- 시험용 저장소의 `get(key)`가 `RuntimeError("private detail")`를 던지게 하고 `GET /kv?key=counter:one`을 보낸다. 실제 Flask 앱을 사용하고 예외의 외부 재전파를 끈다.
+- 시험용 저장소의 `get(key)`가 `RuntimeError("private detail")`를 던지게 하고 `GET /kv?key=counter:one`을 보낸다. 실제 FastAPI 앱을 사용하고 `TestClient(..., raise_server_exceptions=False)`로 예외의 외부 재전파를 끈다.
 - 기대: HTTP 500과 `{"error":"INTERNAL_SERVER_ERROR"}`만 반환. 입력 오류로 바꾸지 않고 예외 상세를 반환하지 않는다.
 - HTTP 오류 경계만 검증하며 500에서 저장 상태 불변을 주장하지 않는다.
 
 ## S2-02·03·09~14. 실제 TCP 동시 요청
 
-환경 변수의 반복 횟수만큼 매번 새 저장소·순차 처리 서버로 실행한다. 요청을 재시도하지 않는다. 각 요청과 배치 전체의 완료 대기에 환경 변수로 지정한 초 단위 한도를 적용한다. 완료된 응답과 미완료를 모두 구분하고 실패·시간 초과를 제외해 통과시키지 않는다. 준비는 HTTP로 하고 선행 PUT 성공을 반드시 확인한다.
+환경 변수의 반복 횟수만큼 매번 새 저장소·단일 이벤트 루프 서버로 실행한다. 요청을 재시도하지 않는다. 각 요청과 배치 전체의 완료 대기에 환경 변수로 지정한 초 단위 한도를 적용한다. 완료된 응답과 미완료를 모두 구분하고 실패·시간 초과를 제외해 통과시키지 않는다. 준비는 HTTP로 하고 선행 PUT 성공을 반드시 확인한다.
 
 | ID | 초기 상태와 동시 입력 | 모든 응답 완료 후 기대 |
 | --- | --- | --- |

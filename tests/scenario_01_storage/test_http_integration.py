@@ -6,14 +6,15 @@ from pathlib import Path
 import runpy
 import subprocess
 import sys
+import time
 from threading import Event, Thread
 from urllib.error import HTTPError
 from urllib.parse import urlencode
 from urllib.request import ProxyHandler, Request, build_opener
 
 import pytest
-from flask import Flask
-from werkzeug.serving import make_server
+import uvicorn
+from fastapi.testclient import TestClient
 
 from app import create_app
 from storage import MiniRedis
@@ -22,15 +23,24 @@ from tests.scenario_01_storage.storage_helpers import snapshot
 
 @pytest.fixture
 def http():
-    """각 시나리오마다 빈 실제 저장소와 순차 처리 서버를 새로 만든다."""
+    """각 시나리오마다 빈 실제 저장소와 단일 이벤트 루프 서버를 새로 만든다."""
     store = MiniRedis()
-    server = make_server("127.0.0.1", 0, create_app(store), threaded=False)
-    thread = Thread(target=server.serve_forever, kwargs={"poll_interval": 0.01})
+    config = uvicorn.Config(
+        create_app(store), host="127.0.0.1", port=0, log_level="error"
+    )
+    server = uvicorn.Server(config)
+    thread = Thread(target=server.run, daemon=True)
     thread.start()
+
+    deadline = time.monotonic() + 5
+    while not server.started and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert server.started, "uvicorn 시작 시간 초과"
+    port = server.servers[0].sockets[0].getsockname()[1]
     opener = build_opener(ProxyHandler({}))
 
     def request_and_check(method, key, expected, *, value=None, status=200):
-        url = f"http://127.0.0.1:{server.port}/kv"
+        url = f"http://127.0.0.1:{port}/kv"
         data = None
         headers = {}
         if method == "PUT":
@@ -56,36 +66,34 @@ def http():
     try:
         yield request_and_check, store
     finally:
-        server.shutdown()
+        server.should_exit = True
         thread.join(timeout=3)
-        server.server_close()
         assert not thread.is_alive()
 
 
 def test_script_entrypoint_connects_real_storage(monkeypatch):
-    """python app.py의 실행 분기가 실제 저장소와 순차 서버를 연결한다."""
+    """python app.py의 실행 분기가 실제 저장소와 단일 이벤트 루프 서버를 연결한다."""
     started = []
 
     def record_run(app, **options):
         started.append((app, options))
 
-    monkeypatch.setattr(Flask, "run", record_run)
+    monkeypatch.setattr(uvicorn, "run", record_run)
     runpy.run_path(str(Path(__file__).resolve().parents[2] / "app.py"), run_name="__main__")
     assert len(started) == 1
     app, options = started[0]
     assert options == {
         "host": "127.0.0.1",
         "port": 5000,
-        "threaded": False,
-        "use_reloader": False,
+        "workers": 1,
     }
-    client = app.test_client()
+    client = TestClient(app)
     stored = client.put("/kv", json={"key": "sample:one", "value": "hello"})
     assert stored.status_code == 200
-    assert stored.get_json() == {"ok": True}
-    found = client.get("/kv", query_string={"key": "sample:one"})
+    assert stored.json() == {"ok": True}
+    found = client.get("/kv", params={"key": "sample:one"})
     assert found.status_code == 200
-    assert found.get_json() == {"found": True, "value": "hello"}
+    assert found.json() == {"found": True, "value": "hello"}
 
 
 def test_script_server_responds_over_http():
@@ -107,7 +115,7 @@ def test_script_server_responds_over_http():
         try:
             for line in process.stdout:
                 logs.append(line)
-                if "Running on http://127.0.0.1:5000" in line:
+                if "Uvicorn running on http://127.0.0.1:5000" in line:
                     ready.set()
                     startup_finished.set()
         finally:

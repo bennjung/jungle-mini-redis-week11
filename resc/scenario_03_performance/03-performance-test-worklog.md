@@ -19,6 +19,7 @@
 
 - 호스트: Linux `7.3.3-1-cachyos-bore`, x86_64, AMD Ryzen 7 7840HS, 논리 CPU 16개, `/proc/meminfo` 총 메모리 31,496,500KiB. 다른 작업과 CPU 주파수 변동을 완전히 통제한 전용 장비가 아니다.
 - 기존 시험 환경: Python 3.14.10, pytest 9.2.0, Flask 3.1.3, Werkzeug 3.1.9. 프로젝트의 전역 의존성은 바꾸지 않는다.
+- 이 기록의 실행 환경·측정값은 Flask 3.1.3·Werkzeug 3.1.9 서버 기준이다. FastAPI/uvicorn 전환 뒤 같은 조건의 재측정은 별도 작업이며, 기존 결과를 FastAPI 결과로 대체하지 않는다.
 - 설치된 Werkzeug 소스에서 응답마다 `Connection: close`를 설정함을 확인했다. 이번에 시작한 기존 `app.py` 서버의 실제 GET 응답에서도 HTTP 200과 `Connection: close`, `Werkzeug/3.1.9 Python/3.14.10`을 확인했다. JMeter에서 객체 재사용을 TCP 재사용으로 보고하지 않는다.
 - 호스트의 `mysql` 명령은 MariaDB 13.0.2 클라이언트다. 이를 MySQL 기준선으로 대체하지 않으며 별도 MySQL 8.4 시험 컨테이너를 준비한다. 사용자 DB를 사용하거나 변경하지 않는다.
 - JMeter 5.6.3은 공식 배포 파일과 Apache SHA512를 대조했다. Connector/J 9.2.0은 Maven Central 배포의 SHA1과 대조했으며, 로컬 SHA256은 `7e9941bbdcca244d878ea95bfff788fd9ba6a65af757f24be6c632930d61c7ed`다. Maven 해당 경로는 SHA256 검증 파일을 제공하지 않아 404였음을 구분한다.

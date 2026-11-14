@@ -3,6 +3,7 @@
 import json
 
 import pytest
+from fastapi.testclient import TestClient
 
 from app import create_app
 from tests.scenario_02_concurrent_counter.contract_helpers import (
@@ -168,8 +169,8 @@ def test_s2_07_bad_body(connected, operation, body):
     prepare(client, "before")
     # json=None 생략이 아니라 실제 JSON null을 전송한다.
     before = state(store)
-    response = client.post(f"/kv/{operation}", data=json.dumps(body),
-                           content_type="application/json")
+    response = client.post(f"/kv/{operation}", content=json.dumps(body),
+                           headers={"Content-Type": "application/json"})
     check(response, 400, {"error": "INVALID_INPUT"})
     assert_json(state(store), before)
     read_twice(client, "counter:one", {"found": True, "value": "before"})
@@ -181,7 +182,8 @@ def test_s2_07_malformed_json(connected, operation):
     client, store = connected
     prepare(client, "before")
     before = state(store)
-    check(client.post(f"/kv/{operation}", data=b'{"key":', content_type="application/json"),
+    check(client.post(f"/kv/{operation}", content=b'{"key":',
+                      headers={"Content-Type": "application/json"}),
           400, {"error": "INVALID_INPUT"})
     assert_json(state(store), before)
 
@@ -201,9 +203,8 @@ def test_s2_08_internal_error_is_json_not_input_error():
         def get(self, key):
             raise RuntimeError("private detail")
 
-    app = create_app(BrokenStorage())
-    app.config.update(TESTING=False, PROPAGATE_EXCEPTIONS=False)
-    response = app.test_client().get("/kv", query_string={"key": "counter:one"})
+    client = TestClient(create_app(BrokenStorage()), raise_server_exceptions=False)
+    response = client.get("/kv", params={"key": "counter:one"})
     check(response, 500, {"error": "INTERNAL_SERVER_ERROR"})
 
 
@@ -229,6 +230,7 @@ def test_s2_15_unrepresentable_bound_literal(connected, operation):
     field = "maximum" if operation == "incr" else "minimum"
     # 1e400은 JSON 숫자 표기지만 현재 Python float로 유한하게 표현할 수 없다.
     raw = '{"key":"counter:one","amount":1,"' + field + '":1e400}'
-    check(client.post(f"/kv/{operation}", data=raw, content_type="application/json"),
+    check(client.post(f"/kv/{operation}", content=raw,
+                      headers={"Content-Type": "application/json"}),
           422, {"error": "OUT_OF_RANGE"})
     assert_json(state(store), before)
