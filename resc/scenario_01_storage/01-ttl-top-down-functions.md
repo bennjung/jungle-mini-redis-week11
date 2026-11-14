@@ -4,6 +4,7 @@
 
 - 기준: [01 TTL 계약](01-ttl-contract.md), [01 TTL 테스트 계약](01-ttl-test-cases.md), [REST API 9절](../../rest-api.md), [04 날씨 TTL/LDC 결정 로그](../scenario_04_response_cache/04-weather-ttl-decision-log.md).
 - 이 문서는 TTL 기능을 기존 `app.py` → `storage.py` 흐름에 배치하고, 테스트 작성부터 구현까지 3인 분업 경계를 정하는 설계 초안이다.
+- `[확정]` 2026-11-14 구현 범위: 01 TTL 전체(저장소 코어·active·HTTP 표면)와 04 날씨 소비자 테스트(T1-21)까지를 한 조각으로 구현한다. timer·03 성능 재측정·대량 무효화·`incr`/`decr`의 TTL 관계·원본 실패 응답은 제외한다.
 - 함수 이름·인자·내부 helper 이름은 `[제안]`이다. 테스트 코드 작성 전에 이 계약을 동결한다.
 - `[미정]` 항목은 구현으로 확정하지 않는다. 담당 범위의 테스트를 작성하기 전에 사용자 확인을 받는다.
 - 새 계층·큐·잠금·별도 저장소를 만들지 않는다. 기존 `create_app(storage)`와 단일 `MiniRedis` 인스턴스, 단일 이벤트 루프·`uvicorn workers=1` 서버를 유지한다.
@@ -47,6 +48,52 @@ HTTP — app.py
 - 그러나 현재 서버는 단일 이벤트 루프(`uvicorn workers=1`)이고 저장소는 일반 `dict`다. 백그라운드 타이머 스레드가 이벤트 루프의 요청 처리와 동시에 `_expires`·`_ttl_keys`를 만지면 잠금·원자성·스레드 수명·테스트 시계를 추가로 정해야 한다. active 사이클은 `_ttl_keys`를 순회하며 네 구조를 제거하므로, 요청과 겹치면 일관성이 깨질 수 있다.
 - 요청 트리거 시간 게이트는 스레드 없이 같은 100ms 기준을 구현한다. 트래픽이 있으면 돌고, 없으면 멈춘다. 유휴 시 새 키도 생기지 않으므로 메모리가 계속 늘지는 않는다.
 - 진짜 유휴 정리가 필요하면 타이머를 도입할 수 있지만, D-05·D-20을 바꾸는 별도 결정이다. 타이머를 넣으면 잠금·스레드 수명·테스트 시계를 함께 정해야 한다.
+
+### 1.3 함수 역할 한눈에
+
+**저장소 public 메서드**
+
+| 함수 | 소유 | 역할 | 반환 |
+| --- | --- | --- | --- |
+| `MiniRedis(clock=None, sampler=None)` | B | 저장소 생성. `_data`·`_expires`·`_ttl_keys`·`_ttl_pos`와 시계·표본 선택기를 준비한다 | 인스턴스 |
+| `set(key, value, ttl=None)` | B | `value`를 저장한다. `ttl`이 있으면 만료 시각을 설정하고, 없으면 기존 TTL을 제거한다 | `{"ok": True}` 또는 `{"error": "INVALID_INPUT"}` |
+| `get(key)` | B | `value`를 조회한다. 만료된 키는 없는 키로 취급한다 | `{"found": True, "value": ...}` 또는 `{"found": False}` |
+| `delete(key)` | B | 키를 삭제하고 삭제 직전 `value`를 돌려준다 | `{"found": ...}` (+ `value`) |
+| `expire(key, ttl)` | B | TTL을 설정·갱신한다. `ttl<=0`이면 키를 즉시 삭제한다 | `{"found": True, "ttl": ...}` 또는 `{"found": False}` |
+| `ttl(key)` | B | 남은 TTL을 ms로 돌려준다. TTL이 없으면 `-1`이다 | `{"found": True, "ttl": ...}` 또는 `{"found": False}` |
+| `persist(key)` | B | TTL만 제거하고 `value`는 유지한다 | `{"found": True, "persisted": ...}` 또는 `{"found": False}` |
+| `incr`·`decr`·`_adjust` | 기존 | 카운터 증감. 이번 범위에서는 수정하지 않는다 | 기존 계약 |
+
+**내부 helper**
+
+| 함수 | 소유 | 역할 | 반환 |
+| --- | --- | --- | --- |
+| `_now_ms()` | B | 현재 시각을 정수 epoch ms로 돌려준다. 테스트는 `FakeClock`을 주입한다 | `int` |
+| `_drop_key(key)` | B | `_data`·`_expires`·`_ttl_keys`·`_ttl_pos`에서 키를 제거한다. TTL 구조 제거의 유일한 경로다 | 없음 |
+| `_set_ttl(key, expiry_ms)` | B | `_expires`에 절대 만료 시각을 기록한다. TTL이 없던 키면 `_ttl_keys`에 추가한다 | 없음 |
+| `_clear_ttl(key)` | B | TTL 구조에서만 제거하고 `value`는 남긴다 | 없음 |
+| `_lazy_expire(key)` | B | 그 키가 만료됐는지 확인하고, 만료면 `_drop_key`를 호출한다 | 만료 여부 |
+| `_maybe_active_expire()` | C | 100ms 게이트를 확인한다. 열렸으면 active 사이클을 최대 2회 실행한다 | 없음 |
+| `_active_expire_cycle(now_ms)` | C | TTL 키에서 최대 20개를 뽑아 만료된 키를 제거한다 | `(expired_count, sample_size)` |
+
+**HTTP 처리 함수**
+
+| 함수 | 소유 | 역할 |
+| --- | --- | --- |
+| `put_kv` | A | `PUT /kv` 본문을 해석하고 `set`을 한 번 호출해 200/400으로 연결한다 |
+| `expire_kv` | A | `POST /kv/expire` 본문을 해석하고 `expire`를 호출한다 |
+| `ttl_kv` | A | `GET /kv/ttl`의 쿼리 `key`를 읽고 `ttl`을 호출한다 |
+| `persist_kv` | A | `POST /kv/persist` 본문을 해석하고 `persist`를 호출한다 |
+
+**테스트 전용 helper**
+
+| 함수 | 소유 | 역할 |
+| --- | --- | --- |
+| `ttl_snapshot(store)` | B | `_expires`·`_ttl_keys`·`_ttl_pos`의 사본을 돌려준다 |
+| `assert_ttl_invariants(store)` | B | 세 구조의 키 집합·위치·길이·중복 없음 조건을 검사한다 |
+| `FakeClock` | C | 가짜 벽시계. `advance(ms)`로 시간을 진행한다 |
+| `FirstKSampler` | C | 현재 `keys`의 앞에서부터 최대 `k`개를 돌려준다 |
+| `snapshot(store)` | 기존 | `_data`의 사본을 돌려준다. 기존 의미를 유지한다 |
 
 ## 2. 3인 분업표
 
@@ -114,7 +161,7 @@ class MiniRedis:
 - `_drop_key`는 swap-pop으로 O(1) 제거한다. C는 이 함수만 호출한다.
 - `_lazy_expire`는 입력 검증 뒤에 호출한다. 입력 거절 시에는 lazy 정리도 하지 않아 기존 상태 보존 규칙을 지킨다.
 - `_maybe_active_expire`는 `self._last_active_ms`가 `None`이면 현재 시각을 기록하고 한 번 실행한다. 그 뒤 100ms 이상 지났을 때만 사이클을 실행한다. `[제안]`
-- `_active_expire_cycle`은 `self._sampler`가 있으면 그것을, 없으면 중복 없는 기본 표본을 쓴다. 표본의 25% 이상이 만료면 `_maybe_active_expire`가 한 번 더 호출한다. 최대 2회다. `[제안]` 표본 중복 여부는 이 기본값으로 동결한다.
+- `_active_expire_cycle`은 `self._sampler`가 있으면 그것을, 없으면 중복 없는 기본 표본을 쓴다. 표본의 25% 이상이 만료면 `_maybe_active_expire`가 한 번 더 호출한다. 최대 2회다. `[확정]` 표본 중복 정책은 중복 없음이다.
 
 ### 3.4 HTTP → 저장소 호출
 
@@ -230,7 +277,7 @@ def _active_expire_cycle(self, now_ms):
 - C는 `_expires`·`_ttl_keys`·`_ttl_pos`를 직접 수정하지 않는다. 제거는 `_drop_key`만 쓴다.
 - 표본 크기는 최대 20개다. 표본의 25% 이상이 만료면 1회 더 실행하고 최대 2회다.
 - 삭제 전에 현재 `_expires`와 키 존재를 확인한다. 표본을 뽑은 뒤 TTL이 갱신됐거나 키가 사라졌으면 삭제하지 않는다.
-- `self._sampler`가 `None`이면 중복 없는 기본 표본을 쓴다. `[제안]` 이 기본값으로 표본 중복 정책을 동결한다.
+- `self._sampler`가 `None`이면 중복 없는 기본 표본을 쓴다. `[확정]` 표본 중복 정책은 중복 없음이다.
 - `_maybe_active_expire`의 첫 호출은 `_last_active_ms`만 기록하고 반환한다. `[제안]` 이 초기 시각 정책으로 동결한다.
 - C는 public 메서드 본문·HTTP 코드를 수정하지 않는다. B가 추가한 hook 호출을 전제로 한다.
 
@@ -294,7 +341,8 @@ def _active_expire_cycle(self, now_ms):
 
 - `[제안]` `MiniRedis(clock=None, sampler=None)` 인터페이스.
 - `[제안]` active 트리거: TTL 관련 public 메서드의 입력 검증 통과 뒤 `_maybe_active_expire()`, `incr`·`decr`는 후속.
-- `[제안]` active 첫 호출은 시각을 기록하고 한 번 실행, 표본은 중복 없이(`random.sample`).
+- `[확정]` 표본은 중복 없이 뽑는다(`random.sample`). 키가 20개 미만이면 전체를 검사한다.
+- `[제안]` active 첫 호출은 시각을 기록하고 한 번 실행.
 - `[제안]` 테스트 파일 분담: `test_ttl_storage.py`(B), `test_ttl_active.py`(C), `test_ttl_http.py`·`test_weather_cache.py`(A).
 - `[미정]` `incr`·`decr`의 TTL 유지·lazy 검사.
 - `[미정]` `POST /kv/expire`·`POST /kv/persist`의 알 수 없는 추가 필드 정책.
