@@ -132,17 +132,17 @@ def test_t1_18_live_and_refreshed_ttl_preserved():
     assert len(sampler.calls) == 1
     assert_alive(store, keys)
 
-    # 추가: TTL을 1_000ms로 줄인 키를 표본으로 돌려주기 전에 60_000ms로 갱신한다.
-    # 계약 원문은 advance(1_000) 뒤 expire로 갱신하라고 적었지만, expire는 lazy
-    # 만료를 먼저 하므로 만료 시각에 도달한 키는 갱신할 수 없다(T1-08과 충돌).
-    # 만료 직전(999ms)에 갱신해 "삭제 전 현재 _expires 확인"만 검증한다.
+    # 추가: TTL을 1_000ms로 줄인 키를 만료시킨 뒤, 표본을 돌려주기 직전에
+    # set으로 다시 저장한다. set은 lazy 만료로 이전 키를 제거하고 새 TTL로
+    # 저장하므로, cycle이 삭제 전에 현재 _expires와 키 존재를 다시 읽는지
+    # 확인할 수 있다. expire는 만료된 키를 되살리지 못하므로 쓰지 않는다.
     assert store.expire(keys[0], TTL_MS) == {"found": True, "ttl": TTL_MS}
-    clock.advance(TTL_MS - 1)
+    clock.advance(TTL_MS)
 
-    def refresh_ttl():
-        assert store.expire(keys[0], 60_000) == {"found": True, "ttl": 60_000}
+    def re_add():
+        assert store.set(keys[0], "hello", ttl=60_000) == {"ok": True}
 
-    sampler.before_return = refresh_ttl
+    sampler.before_return = re_add
 
     store._maybe_active_expire()
 

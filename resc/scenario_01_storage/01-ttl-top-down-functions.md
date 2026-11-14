@@ -278,7 +278,7 @@ def _active_expire_cycle(self, now_ms):
 
 - C는 `_expires`·`_ttl_keys`·`_ttl_pos`를 직접 수정하지 않는다. 제거는 `_drop_key`만 쓴다.
 - 표본 크기는 최대 20개다. 표본의 25% 이상이 만료면 1회 더 실행하고 최대 2회다.
-- 삭제 전에 현재 `_expires`와 키 존재를 확인한다. 표본을 뽑은 뒤 TTL이 갱신됐거나 키가 사라졌으면 삭제하지 않는다.
+- 삭제 전에 현재 `_expires`와 키 존재를 확인한다. 표본을 뽑은 뒤 TTL이 갱신됐거나 키가 사라졌으면 삭제하지 않는다. 현재 tick은 동기라 요청이 사이에 끼어들지 않는다. 이 확인은 주입한 sampler가 표본 반환 중 상태를 바꾸는 경우와, 향후 tick이 비동기가 되는 경우를 방어한다.
 - `self._sampler`가 `None`이면 중복 없는 기본 표본을 쓴다. `[확정]` 표본 중복 정책은 중복 없음이다.
 - 100ms 주기는 타이머 task가 지킨다. `_maybe_active_expire`는 호출될 때마다 사이클을 실행한다.
 - C는 public 메서드 본문·HTTP 코드를 수정하지 않는다. 타이머 task는 C가 `app.py`의 lifespan 블록에 추가한다.

@@ -21,7 +21,7 @@
 - **C가 타이머 task를 구현한다.** `app.py`의 lifespan 블록에서 task를 만들고 종료 시 취소·대기한다. C는 lifespan 블록만 수정하고 HTTP handler는 건드리지 않는다(A 소유).
 - public 메서드는 active를 호출하지 않는다. TTL 코어는 lazy 만료만 한다.
 - tick 안에 100ms 게이트를 두지 않는다. 주기는 타이머가 지킨다. tick은 호출될 때마다 사이클을 실행한다.
-- 타이머 task와 저장소 호출은 같은 이벤트 루프에서 실행된다. tick의 저장소 호출은 동기로 끝나므로 사이클 중간에 요청이 끼어들지 않는다. 별도 스레드·큐·잠금을 만들지 않는다.
+- 타이머 task와 저장소 호출은 같은 이벤트 루프에서 실행된다. tick에는 await이 없고 저장소 호출이 동기로 끝나므로 사이클 중간에 요청이 끼어들지 않는다. 별도 스레드·큐·잠금을 만들지 않는다.
 
 ```python
 logger = logging.getLogger(__name__)
@@ -68,7 +68,7 @@ async def lifespan(app):
 - `[확정]` TTL 키가 없으면 `_active_expire_cycle`이 `(0, 0)`을 반환한다. `_maybe_active_expire`는 항상 사이클을 한 번 호출하고, tick에서 빈 목록을 따로 검사하지 않는다.
 - `[확정]` sampler는 새 리스트를 반환한다. cycle은 표본을 복사하지 않고 그대로 순회한다.
 - `self._sampler`가 있으면 그것을 쓰고, 없으면 `random.sample`로 중복 없이 뽑는다. sampler는 새 리스트를 반환한다.
-- 각 표본 키에 대해 삭제 전에 현재 `_expires`와 키 존재를 다시 확인한다. 표본을 뽑은 뒤 TTL이 갱신됐거나 키가 사라졌으면 삭제하지 않는다.
+- 각 표본 키에 대해 삭제 전에 현재 `_expires`와 키 존재를 다시 확인한다. 표본을 뽑은 뒤 TTL이 갱신됐거나 키가 사라졌으면 삭제하지 않는다. 현재 tick은 동기라 요청이 사이에 끼어들지 않는다. 이 확인은 주입한 sampler가 표본 반환 중 상태를 바꾸는 경우와, 향후 tick이 비동기가 되는 경우를 방어한다.
 - 만료된 키는 `_drop_key(key)`로만 제거한다. `_expires`·`_ttl_keys`·`_ttl_pos`를 직접 수정하지 않는다.
 - `(expired_count, sample_size)`를 반환한다.
 - 만료 비율은 `expired_count * 4 >= sample_size`로 판정한다. `sample_size`가 0이면 반복하지 않는다.
