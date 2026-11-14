@@ -4,7 +4,7 @@
 
 - 기준: [01 TTL 계약](01-ttl-contract.md), [04 날씨 TTL/LDC 결정 로그](../scenario_04_response_cache/04-weather-ttl-decision-log.md), [REST API 9절](../../rest-api.md).
 - 이 문서는 확정된 TTL 행동을 정확한 입력·관찰로 구체화한 테스트 명세 초안이다. 아래 표본은 계약을 검증하기 위한 입력이며 새 기능·정책을 추가하지 않는다. 정확한 표본을 사용자 검토 없이 동결된 계약이라고 주장하지 않는다.
-- 저장소 코어 테스트: `tests/scenario_01_storage/test_ttl_storage.py`. Active 만료 테스트: `tests/scenario_01_storage/test_ttl_active.py`. HTTP 표면 테스트: `tests/scenario_01_storage/test_ttl_http.py`. 날씨 소비자 기능 테스트: `tests/scenario_04_response_cache/test_weather_cache.py`.
+- 저장소 코어 테스트: `tests/scenario_01_storage/test_ttl_storage.py`. Active 만료 테스트: `tests/scenario_01_storage/test_ttl_active.py`. HTTP 표면 테스트: `tests/scenario_01_storage/test_ttl_http.py`. 타이머 task 테스트: `tests/scenario_01_storage/test_ttl_timer.py`(후속 timer 브랜치). 날씨 소비자 기능 테스트: `tests/scenario_04_response_cache/test_weather_cache.py`.
 - 테스트 helper: `tests/scenario_01_storage/ttl_state_helpers.py`, `tests/scenario_01_storage/ttl_clock_helpers.py`.
 - 구현 전에 테스트를 실행해 실패 원인을 확인하고, 구현 뒤 같은 테스트를 다시 실행한다. 테스트에 맞추어 TTL 계약을 완화하지 않는다.
 - `[미정]` 항목은 기대 결과를 임의로 만들지 않는다. 결정 전에는 해당 테스트를 작성하지 않거나 `[미검증]`으로 남긴다.
@@ -18,7 +18,7 @@
   - `clock()`은 정수 epoch ms를 반환한다. 기본값은 실제 벽시계다.
   - `sampler(keys, k)`는 `keys`에서 최대 `k`개를 반환한다. 기본값은 중복 없는 무작위 표본이다.
   - `MiniRedis()`는 기존처럼 동작해야 한다. 이 인터페이스는 테스트 코드 작성 전에 승인한다.
-- `[제안]` active 사이클 트리거는 테스트에서 `get(key)` 호출로 만든다. 실제 트리거 연산·실행 시점은 `[미정]`이므로, 결정 전에는 active 테스트를 `[미검증]`으로 둔다.
+- `[확정]` active tick은 테스트에서 `_maybe_active_expire()` 또는 `_active_expire_cycle(now)`를 직접 호출해 재현한다. 실제 100ms 타이머를 기다리지 않는다. 타이머 task의 주기·유휴 실행은 T1-19(후속 timer 브랜치)에서 확인한다.
 - `snapshot(store)`는 기존처럼 `_data`의 사본을 반환한다. `ttl_snapshot(store)`는 `(_expires.copy(), list(_ttl_keys), _ttl_pos.copy())`를 반환한다. 테스트 전용이며 실행 코드의 메서드가 아니다.
 - 불변 조건 검사: `set(_expires) == set(_ttl_keys) == set(_ttl_pos)`, 모든 키의 위치 일치, 세 길이 일치, `_ttl_keys` 중복 없음.
 - 각 호출 직후 반환값 전체와 `_data`·TTL 구조를 확인한다. 반환값의 필드 구성과 타입을 비교하고, 딕셔너리 순서는 강제하지 않는다.
@@ -136,48 +136,47 @@
 
 ## T1-14. active 만료 — 기본 표본
 
-> T1-14~19는 `get` 트리거와 `keys[:k]` 고정 표본 선택기를 가정한 조건부 초안이다. 트리거 연산·실행 시점·표본 정책이 확정되기 전에는 실행 계약으로 쓰지 않는다.
+> T1-14~18은 tick 함수를 직접 호출하고 `keys[:k]` 고정 표본 선택기를 쓰는 조건부 초안이다. T1-19는 후속 timer 브랜치의 테스트다.
 
 - 사전 상태: TTL 1_000ms인 키 25개를 `set`으로 만든다. `advance(1_000)`.
-- 입력: 표본 선택기는 현재 `_ttl_keys`의 앞에서부터 최대 20개를 반환한다. `get("trigger")`를 호출한다.
+- 입력: 표본 선택기는 현재 `_ttl_keys`의 앞에서부터 최대 20개를 반환한다. `_maybe_active_expire()`를 호출한다.
 - 기대: 첫 사이클에서 앞 20개가 제거되고, 만료 비율 100%이므로 같은 트리거에서 남은 5개를 한 번 더 실행해 모두 제거한다. 표본 선택기 호출은 2회다.
 - 유지: TTL 없는 키와 TTL이 남은 키는 보존한다. 불변 조건.
 
 ## T1-15. active 만료 — 25% 미만이면 반복하지 않음
 
 - 사전 상태: TTL 1_000ms인 키 4개를 먼저 `set`하고 `advance(1_000)`로 만료시킨다. 이어 TTL 1_000ms인 키 16개를 `set`한다. `_ttl_keys`에는 만료 4개가 앞에, 살아 있는 16개가 뒤에 있다.
-- 입력: 표본 선택기가 20개를 모두 반환하게 하고 `get`으로 트리거한다.
+- 입력: 표본 선택기가 20개를 모두 반환하게 하고 `_maybe_active_expire()`를 호출한다.
 - 기대: 만료 4개만 제거되고, 4/20 = 20% < 25%이므로 표본 선택기는 1회만 호출된다. 살아 있는 16개는 보존된다.
 - 유지: 불변 조건.
 
 ## T1-16. active 만료 — 25% 이상이면 1회 더
 
 - 사전 상태: TTL 1_000ms인 키 5개를 먼저 `set`하고 `advance(1_000)`로 만료시킨다. 이어 TTL 1_000ms인 키 15개를 `set`한다. `_ttl_keys`에는 만료 5개가 앞에, 살아 있는 15개가 뒤에 있다.
-- 입력: 표본 선택기가 20개를 모두 반환하게 하고 `get`으로 트리거한다.
+- 입력: 표본 선택기가 20개를 모두 반환하게 하고 `_maybe_active_expire()`를 호출한다.
 - 기대: 5/20 = 25%이므로 표본 선택기가 2회 호출된다. 두 번째 표본에서 남은 만료 키가 없으면 추가 반복은 없다. 만료 5개가 제거되고 15개가 보존된다.
 - 유지: 최대 2회. 불변 조건.
 
-## T1-17. active 만료 — 100ms 간격
+## T1-17. active tick — 호출마다 실행
 
 - 사전 상태: TTL 60_000ms인 키 1개.
-- 입력: 초기 `last_cycle` 차이를 피하기 위해 `advance(100)` 뒤 `get`으로 첫 사이클을 실행한다. 이어 `advance(99)` → `get` → `advance(1)` → `get`.
-- 기대: 표본 선택기 호출은 첫 실행 1회, 99ms 뒤 0회, 100ms 뒤 1회. 총 2회.
-- 유지: 100ms 미만에서는 사이클을 실행하지 않는다.
-- 미정: 첫 사이클의 초기 시각과 트리거 연산. 이 테스트는 첫 실행 뒤 `last_cycle`이 갱신됐다는 전제를 쓴다.
+- 입력: `_maybe_active_expire()`를 두 번 호출한다.
+- 기대: 표본 선택기 호출은 2회다. tick 안에 100ms 게이트를 두지 않는다.
+- 유지: 100ms 주기는 타이머 task가 지킨다. task의 주기·유휴 실행은 T1-19(후속 timer 브랜치)에서 확인한다.
 
 ## T1-18. active 만료 — 살아 있는 키와 갱신된 TTL 보존
 
 - 사전 상태: TTL 60_000ms인 키 2개.
-- 입력: 초기 `last_cycle` 차이를 피하기 위해 `advance(100)` 뒤, 표본 선택기가 두 키를 모두 반환하게 하고 `get`으로 트리거한다.
+- 입력: 표본 선택기가 두 키를 모두 반환하게 하고 `_maybe_active_expire()`를 호출한다.
 - 기대: 둘 다 만료되지 않았으므로 제거되지 않는다.
 - 추가: 키 하나의 TTL을 1_000ms로 줄이고 `advance(1_000)` 뒤 같은 키를 표본으로 반환하기 전에 `expire`로 TTL을 60_000ms로 갱신한다. 트리거 후 그 키는 삭제되지 않는다. 삭제 전 현재 `_expires`를 확인하는 동작을 검증한다.
 
-## T1-19. active 만료 — 유휴 상태
+## T1-19. 타이머 — 유휴 상태 (후속 timer 브랜치)
 
 - 사전 상태: TTL 1_000ms인 키 1개. `advance(1_000)`.
-- 입력: 요청 없이 시간만 진행한다. 이어 `ttl_snapshot`으로 물리적 상태를 확인하고, `get`으로 트리거한다.
-- 기대: 요청이 없을 때는 표본 선택기가 호출되지 않는다(호출 횟수 0). 트리거 후 만료 키가 제거된다.
-- 유지: 유휴 상태의 즉시 회수는 보장하지 않는다는 계약과 일치한다.
+- 입력: 요청을 보내지 않고 lifespan 타이머 task를 100ms 이상 실행한다.
+- 기대: 요청이 없어도 tick이 실행되어 만료 키가 제거된다.
+- 유지: 타이머 task 구현과 함께 후속 브랜치에서 작성한다. 이번 조각에는 포함하지 않는다.
 
 ## T1-20. HTTP TTL 표면
 
@@ -221,9 +220,8 @@
 
 ## T1-22. 미정 항목 (테스트 작성 보류)
 
-- `[확정]` active 표본은 중복 없이 뽑는다(`random.sample`). `T1-14`~`T1-19`의 고정 표본 선택기는 이 조건과 맞는다.
-- `[미정]` active 사이클 실행 시점(요청 진입·종료)과 트리거 연산. 현재 `T1-14`~`T1-19`는 `get` 진입 시 트리거를 가정한다.
-- `[미정]` 첫 active 사이클의 초기 시각. `T1-17`은 첫 `get` 뒤 `last_cycle`이 갱신됐다는 전제를 쓴다.
+- `[확정]` active 표본은 중복 없이 뽑는다(`random.sample`). `T1-14`~`T1-18`의 고정 표본 선택기는 이 조건과 맞는다.
+- `[확정]` active 만료는 lifespan의 100ms 주기 타이머가 실행한다(D-24). `T1-14`~`T1-18`은 tick 함수를 직접 호출한다. `T1-19`는 후속 timer 브랜치에서 작성한다.
 - `[미정]` `incr`·`decr`의 lazy 만료 검사와 TTL 유지 여부. 결정 전에는 테스트를 작성하지 않는다.
 - `[미정]` `POST /kv/expire`·`POST /kv/persist`의 알 수 없는 추가 필드 정책. 결정 전에는 해당 입력을 테스트하지 않는다.
 - `[미정]` 원본 실패·MiniRedis 실패 시 사용자 응답. 04 문서의 미정 항목과 함께 결정한다.
