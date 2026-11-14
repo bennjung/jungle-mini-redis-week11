@@ -59,7 +59,7 @@ async def lifespan(app):
 ### `_active_expire_cycle(now_ms)`
 
 - `_ttl_keys`에서 최대 20개를 뽑는다. `k = min(20, len(_ttl_keys))`.
-- `[미정]` TTL 키가 없을 때: `_active_expire_cycle`이 `(0, 0)`을 반환한다 / `_maybe_active_expire`가 먼저 반환한다.
+- `[확정]` TTL 키가 없으면 `_active_expire_cycle`이 `(0, 0)`을 반환한다. `_maybe_active_expire`는 항상 사이클을 한 번 호출하고, tick에서 빈 목록을 따로 검사하지 않는다.
 - `[미정]` 표본 순회: `list(sample)`로 복사한다 / 샘플러가 새 리스트를 반환하도록 계약한다.
 - `self._sampler`가 있으면 그것을 쓰고, 없으면 `random.sample`로 중복 없이 뽑는다.
 - 각 표본 키에 대해 삭제 전에 현재 `_expires`와 키 존재를 다시 확인한다. 표본을 뽑은 뒤 TTL이 갱신됐거나 키가 사라졌으면 삭제하지 않는다.

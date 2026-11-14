@@ -346,6 +346,7 @@ def _active_expire_cycle(self, now_ms):
 - `[확정]` `MiniRedis(clock=None, sampler=None)` 인터페이스. `clock()`은 정수 epoch ms, `sampler(keys, k)`는 최대 `k`개를 반환하고 기본값은 실제 벽시계·`random.sample`이다.
 - `[확정]` active 만료는 lifespan의 100ms 주기 타이머가 실행한다(D-24). public 메서드는 active를 호출하지 않는다. 타이머 task와 T1-19는 C가 구현한다.
 - `[확정]` 표본은 중복 없이 뽑는다(`random.sample`). 키가 20개 미만이면 전체를 검사한다.
+- `[확정]` TTL 키가 없으면 `_active_expire_cycle`이 `(0, 0)`을 반환한다. tick은 빈 목록을 따로 검사하지 않는다.
 - `[확정]` 테스트 파일 분담: `test_ttl_storage.py`(B), `test_ttl_active.py`·`test_ttl_timer.py`(C), `test_ttl_http.py`·`test_weather_cache.py`(A).
 - `[확정]` `incr`·`decr`는 lazy 만료 검사를 하고, 만료된 키는 `NOT_FOUND`, 살아 있는 키의 TTL은 유지한다(T1-23).
 - `[확정]` `POST /kv/expire`·`POST /kv/persist`는 계약 필드 외 추가 필드를 무시한다. `PUT /kv`와 같고, `incr`/`decr`의 거절 규칙과 구분한다.
