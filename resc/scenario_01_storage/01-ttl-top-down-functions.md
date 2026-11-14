@@ -101,12 +101,13 @@ lifespan 타이머 task — app.py (후속 timer 브랜치)
 
 | 역할 | 수정 파일 | 담당 함수 | 테스트 | 선행 조건 |
 | --- | --- | --- | --- | --- |
-| **A. HTTP 경계·소비자** | `app.py`, `tests/scenario_01_storage/test_ttl_http.py`, `tests/scenario_04_response_cache/test_weather_cache.py` | `put_kv`, `expire_kv`, `ttl_kv`, `persist_kv` | T1-20, T1-21 | B의 저장소 인터페이스, C의 `FakeClock` |
-| **B. TTL 코어** | `storage.py`의 TTL 코어·public 메서드, `tests/scenario_01_storage/test_ttl_storage.py`, `tests/scenario_01_storage/ttl_state_helpers.py` | `__init__`, `_now_ms`, `_drop_key`, `_set_ttl`, `_clear_ttl`, `_lazy_expire`, `set`, `get`, `delete`, `expire`, `ttl`, `persist`, `incr`, `decr`, `_adjust` | T1-01~13, T1-23 | 없음 |
-| **C. Active 만료** | `storage.py`의 active 구간, `tests/scenario_01_storage/test_ttl_active.py`, `tests/scenario_01_storage/ttl_clock_helpers.py` | `_maybe_active_expire`, `_active_expire_cycle` | T1-14~18 | B의 `_now_ms`·`_drop_key`·TTL 구조 |
+| [**A. HTTP 경계·소비자**](01-ttl-a-http-contract.md) | `app.py`, `tests/scenario_01_storage/test_ttl_http.py`, `tests/scenario_04_response_cache/test_weather_cache.py` | `put_kv`, `expire_kv`, `ttl_kv`, `persist_kv` | T1-20, T1-21 | B의 저장소 인터페이스, C의 `FakeClock` |
+| [**B. TTL 코어**](01-ttl-b-core-contract.md) | `storage.py`의 TTL 코어·public 메서드, `tests/scenario_01_storage/test_ttl_storage.py`, `tests/scenario_01_storage/ttl_state_helpers.py` | `__init__`, `_now_ms`, `_drop_key`, `_set_ttl`, `_clear_ttl`, `_lazy_expire`, `set`, `get`, `delete`, `expire`, `ttl`, `persist`, `incr`, `decr`, `_adjust` | T1-01~13, T1-23 | 없음 |
+| [**C. Active 만료**](01-ttl-c-active-contract.md) | `storage.py`의 active 구간, `tests/scenario_01_storage/test_ttl_active.py`, `tests/scenario_01_storage/ttl_clock_helpers.py` | `_maybe_active_expire`, `_active_expire_cycle` | T1-14~18 | B의 `_now_ms`·`_drop_key`·TTL 구조 |
 | **통합** | `storage.py` 병합, 전체 테스트 실행 | 함수 단위 병합·회귀 확인 | T1-01~18, T1-20~21 | A·B·C |
 
 - B가 `storage.py` 코어의 주 담당이다. C의 active 함수는 같은 파일에 들어가므로 B가 함수 단위로 병합한다. 어느 한쪽의 파일 전체로 다른 쪽을 덮어쓰지 않는다.
+- 역할별 동결 계약: [A. HTTP 경계·소비자](01-ttl-a-http-contract.md), [B. TTL 코어](01-ttl-b-core-contract.md), [C. Active tick](01-ttl-c-active-contract.md). 이 문서는 분업 경계와 공통 계약을 소유하고, 각 역할의 세부 동결은 해당 문서를 따른다.
 - A는 `storage.py`를 수정하지 않는다. C는 `app.py`를 수정하지 않는다.
 - 테스트 파일은 담당별로 분리한다. 테스트 계약 문서의 파일 목록은 이 분담에 맞춰 `test_ttl_storage.py`(B)·`test_ttl_active.py`(C)·`test_ttl_http.py`·`test_weather_cache.py`(A)로 갱신한다. lifespan 타이머 task와 T1-19는 후속 timer 브랜치의 `test_ttl_timer.py`로 둔다.
 - B가 가장 긴 경로다. A와 C는 B의 인터페이스가 동결된 뒤 테스트를 먼저 작성하고, 구현은 각자 범위에서 병렬로 진행할 수 있다.
