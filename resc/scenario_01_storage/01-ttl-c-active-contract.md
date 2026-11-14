@@ -24,10 +24,16 @@
 - 타이머 task와 저장소 호출은 같은 이벤트 루프에서 실행된다. tick의 저장소 호출은 동기로 끝나므로 사이클 중간에 요청이 끼어들지 않는다. 별도 스레드·큐·잠금을 만들지 않는다.
 
 ```python
-async def _timer_loop(storage):
+logger = logging.getLogger(__name__)
+
+async def _timer_loop(storage, interval=0.1, sleep=asyncio.sleep):
     while True:
-        await asyncio.sleep(0.1)
-        storage._maybe_active_expire()
+        await sleep(interval)
+        try:
+            storage._maybe_active_expire()
+        except Exception:
+            logger.exception("TTL active cleanup failed; timer stopped")
+            return
 
 @asynccontextmanager
 async def lifespan(app):
@@ -41,8 +47,8 @@ async def lifespan(app):
 ```
 
 - `[확정]` 타이머는 시작 후 100ms를 기다렸다가 첫 tick을 실행한다. 시작 직후에는 실행하지 않는다.
-- `[미정]` tick에서 예상하지 못한 예외가 났을 때 task를 계속 돌릴지, 예외를 그대로 두고 task를 끝낼지.
-- `[미정]` T1-19에서 100ms를 실제로 기다리지 않고 주기를 제어하는 방법(간격 주입·짧은 간격·loop 본문 직접 호출).
+- `[확정]` tick에서 예상하지 못한 예외가 나면 `logger.exception`으로 남기고 task를 끝낸다. 앱은 계속 동작하고, 정리는 멈춘다.
+- `[확정]` `_timer_loop(storage, interval=0.1, sleep=asyncio.sleep)`로 sleep을 주입한다. 테스트는 가짜 sleep으로 tick 횟수를 제어하고 실제 100ms를 기다리지 않는다.
 
 ## tick 계약
 
@@ -70,7 +76,7 @@ async def lifespan(app):
 ## 테스트
 
 - 동결된 입력과 기대값은 [TTL 테스트 계약](01-ttl-test-cases.md)의 T1-14~18을 따른다. tick 함수를 직접 호출하고, 실제 100ms를 기다리지 않는다.
-- T1-19(유휴 상태의 타이머)는 C가 타이머 task와 함께 작성한다. 테스트에서 주기를 제어하는 방법은 `[미정]`이다.
+- T1-19(유휴 상태의 타이머)는 C가 작성한다. `_timer_loop`에 가짜 sleep을 주입해 tick 횟수를 제어하고 실제 100ms를 기다리지 않는다.
 - `FakeClock`은 기준 ms와 `advance(ms)`를 제공한다. `FirstKSampler`는 현재 `keys`의 앞에서부터 최대 `k`개를 돌려준다.
 - 각 테스트 뒤 `assert_ttl_invariants(store)`로 네 구조의 일관성을 확인한다.
 
