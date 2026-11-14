@@ -16,7 +16,7 @@
 - 가짜 벽시계 기준값: `BASE_MS = 1_700_000_000_000`. `advance(ms)`는 현재 값을 `ms`만큼 증가시킨다.
 - `[확정]` 테스트 주입 인터페이스: `MiniRedis(clock=clock, sampler=sampler)`.
   - `clock()`은 정수 epoch ms를 반환한다. 기본값은 실제 벽시계다.
-  - `sampler(keys, k)`는 `keys`에서 최대 `k`개를 반환한다. 기본값은 중복 없는 무작위 표본이다.
+  - `sampler(keys, k)`는 `keys`에서 최대 `k`개를 새 리스트로 반환한다. 기본값은 중복 없는 무작위 표본이다.
   - `MiniRedis()`는 기존처럼 동작해야 한다. 이 인터페이스는 2026-11-14에 동결했다.
 - `[확정]` active tick은 테스트에서 `_maybe_active_expire()` 또는 `_active_expire_cycle(now)`를 직접 호출해 재현한다. 실제 100ms 타이머를 기다리지 않는다. 타이머 task의 주기·유휴 실행은 T1-19(C)에서 확인한다.
 - `snapshot(store)`는 기존처럼 `_data`의 사본을 반환한다. `ttl_snapshot(store)`는 `(_expires.copy(), list(_ttl_keys), _ttl_pos.copy())`를 반환한다. 테스트 전용이며 실행 코드의 메서드가 아니다.

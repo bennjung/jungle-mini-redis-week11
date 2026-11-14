@@ -32,7 +32,7 @@
 
 - `MiniRedis(clock=None, sampler=None)`로 생성한다. 기존 `MiniRedis()` 호출과 호환된다.
 - `_clock()`은 정수 epoch ms를 반환한다. `None`이면 실제 벽시계를 쓴다.
-- `_sampler(keys, k)`는 C가 쓰는 표본 선택기다. 기본값은 `random.sample`이다.
+- `_sampler(keys, k)`는 C가 쓰는 표본 선택기다. 새 리스트를 반환해야 하며 기본값은 `random.sample`이다.
 - 필드: `_data`, `_expires`, `_ttl_keys`, `_ttl_pos`, `_clock`, `_sampler`.
 
 ## 내부 helper

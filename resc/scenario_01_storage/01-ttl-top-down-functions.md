@@ -145,7 +145,7 @@ class MiniRedis:
 ```
 
 - `clock()`은 정수 epoch ms를 반환한다. `None`이면 실제 벽시계를 쓴다.
-- `sampler(keys, k)`는 현재 TTL 키에서 최대 `k`개를 반환한다. `None`이면 C의 active 코드가 기본 표본을 쓴다.
+- `sampler(keys, k)`는 현재 TTL 키에서 최대 `k`개를 새 리스트로 반환한다. `None`이면 C의 active 코드가 기본 표본을 쓴다.
 - `MiniRedis()`는 기존 동작과 호환되어야 한다.
 - 이 인터페이스는 테스트 코드 작성 전에 동결했다(2026-11-14).
 
@@ -346,6 +346,7 @@ def _active_expire_cycle(self, now_ms):
 - `[확정]` `MiniRedis(clock=None, sampler=None)` 인터페이스. `clock()`은 정수 epoch ms, `sampler(keys, k)`는 최대 `k`개를 반환하고 기본값은 실제 벽시계·`random.sample`이다.
 - `[확정]` active 만료는 lifespan의 100ms 주기 타이머가 실행한다(D-24). public 메서드는 active를 호출하지 않는다. 타이머 task와 T1-19는 C가 구현한다.
 - `[확정]` 표본은 중복 없이 뽑는다(`random.sample`). 키가 20개 미만이면 전체를 검사한다.
+- `[확정]` sampler는 새 리스트를 반환한다. cycle은 표본을 복사하지 않는다.
 - `[확정]` TTL 키가 없으면 `_active_expire_cycle`이 `(0, 0)`을 반환한다. tick은 빈 목록을 따로 검사하지 않는다.
 - `[확정]` 타이머는 시작 후 100ms 뒤에 첫 tick을 실행한다. 시작 직후에는 실행하지 않는다.
 - `[확정]` tick에서 예상하지 못한 예외가 나면 `logger.exception`으로 남기고 task를 끝낸다. 앱은 계속 동작하고 정리는 멈춘다.
