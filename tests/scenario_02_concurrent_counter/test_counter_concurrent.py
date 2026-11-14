@@ -1,4 +1,4 @@
-"""S2-02·03·09~14: 순차 서버에 실제 TCP HTTP 요청을 동시에 진행한다.
+"""S2-02·03·09~14: 단일 이벤트 루프 서버에 실제 TCP HTTP 요청을 동시에 진행한다.
 
 반복·완료 한도는 실행자가 COUNTER_TEST_REPEAT·COUNTER_TEST_TIMEOUT으로 지정한다.
 미지정 시 보류된 실행 조건을 임의로 확정하지 않고 미검증으로 남긴다.
@@ -9,13 +9,14 @@ from contextlib import contextmanager
 import json
 import math
 import os
+import time
 from threading import Event, Thread
 from urllib.error import HTTPError
 from urllib.parse import urlencode
 from urllib.request import ProxyHandler, Request, build_opener
 
 import pytest
-from werkzeug.serving import make_server
+import uvicorn
 
 from app import create_app
 from storage import MiniRedis
@@ -34,15 +35,26 @@ def execution_limits():
 
 
 @contextmanager
-def sequential_server(timeout):
-    server = make_server("127.0.0.1", 0, create_app(MiniRedis()), threaded=False)
-    thread = Thread(target=server.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
+def running_server(timeout):
+    """단일 이벤트 루프 서버를 스레드에서 띄우고 실제 바인딩된 포트를 읽는다."""
+    config = uvicorn.Config(
+        create_app(MiniRedis()), host="127.0.0.1", port=0, log_level="error"
+    )
+    server = uvicorn.Server(config)
+    thread = Thread(target=server.run, daemon=True)
     thread.start()
+
+    deadline = time.monotonic() + timeout
+    while not server.started:
+        assert thread.is_alive(), "서버 시작 전 종료"
+        assert time.monotonic() < deadline, "서버 시작 시간 초과"
+        time.sleep(0.01)
+    port = server.servers[0].sockets[0].getsockname()[1]
 
     def request(method, path, body=None):
         data = None if body is None else json.dumps(body).encode("utf-8")
         headers = {} if data is None else {"Content-Type": "application/json"}
-        outgoing = Request(f"http://127.0.0.1:{server.port}{path}",
+        outgoing = Request(f"http://127.0.0.1:{port}{path}",
                            data=data, headers=headers, method=method)
         # 연결·쿠키·opener를 작업 스레드끼리 공유하지 않는다. 자동 재시도하지 않는다.
         opener = build_opener(ProxyHandler({}))
@@ -58,12 +70,9 @@ def sequential_server(timeout):
         yield request
     finally:
         # 앱의 비정상 정지 때문에 테스트 정리까지 무한히 기다리지 않는다.
-        stopping = Thread(target=server.shutdown, daemon=True)
-        stopping.start()
-        stopping.join(timeout=timeout)
-        server.server_close()
+        server.should_exit = True
         thread.join(timeout=timeout)
-        assert not stopping.is_alive() and not thread.is_alive(), "서버 종료 미완료"
+        assert not thread.is_alive(), "서버 종료 미완료"
 
 
 def batch(request, commands, timeout):
@@ -120,7 +129,7 @@ def success_values(results, expected):
 def test_concurrent_contract(execution_limits, case_id):
     repeat, timeout = execution_limits
     for iteration in range(repeat):
-        with sequential_server(timeout) as request:
+        with running_server(timeout) as request:
             seed(request, "counter:other", "keep")
             initial = 10 if case_id in ("S2-03", "S2-12", "S2-13", "S2-14") else 0
             if case_id == "S2-10":

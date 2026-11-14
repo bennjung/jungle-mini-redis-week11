@@ -48,7 +48,7 @@
 
 ### 확정된 최소 HTTP API
 
-- 구현 언어는 Python, 웹 프레임워크는 Flask, 테스트 도구는 pytest다. Python·Flask 버전은 아직 미정이다. HTTP 담당의 상세 계약·설계·구현·검증 기록은 [HTTP 담당 범위](01-http-scope.md)를 따른다.
+- 구현 언어는 Python, 웹 프레임워크는 FastAPI, 테스트 도구는 pytest다. FastAPI/ASGI 전환은 앱 lifecycle(`lifespan`)에서 TTL active cleanup의 주기 실행 자리를 소유하기 위한 것이며, 전환 배경·범위는 [마이그레이션 설계](../fastapi-migration-design.md)를 따른다. Python·FastAPI·uvicorn 버전은 아직 미정이다. HTTP 담당의 상세 계약·설계·구현·검증 기록은 [HTTP 담당 범위](01-http-scope.md)를 따른다.
 
 | 동작 | 요청 | 정상 응답 |
 | --- | --- | --- |
@@ -306,7 +306,7 @@
 - 문서화 범위: 저장·반복 조회, 삭제 반환·삭제 후 없음, 다른 키 보존, 덮어쓰기, 없는 키·반복 삭제, 빈 문자열·JSON·숫자 표현·null 글자 보존, 크기 경계, 실제 `null` 보관·삭제·덮어쓰기, 모든 진입점의 무효 키 거절 및 무효 value 거절.
 - `storage.py`에 구현했으며 `.venv/bin/python -m pytest tests/ -q` 실행 결과 54개가 통과했다. 기존 S1-01~08의 20개 케이스와 스냅샷 독립성 1개, 추가 S1-09·10의 33개 케이스다. 상세 명세 대조·구현 전후 실행 결과는 [작업 기록](storage-test-worklog.md)에 남긴다.
 - 이 결과는 저장소 단위 테스트에 한정한다. HTTP 분리·실제 저장소 연결·로컬 HTTP 기능 검증의 결과는 [HTTP 담당 범위](01-http-scope.md)에 둔다. 동시성·TTL·성능·장애 복구는 아직 검증하지 않았다.
-- 구현 언어는 Python이며 테스트 도구·클래스 배치·준비·전체 상태 관찰 방법과 내부 `dict` 사용이 합의되었다. Python·Flask 지원 버전은 미정이며 HTTP 상세는 [HTTP 담당 범위](01-http-scope.md)를 따른다. 테스트 입력과 기대 결과를 구현 편의에 맞춰 변경하지 않는다.
+- 구현 언어는 Python이며 테스트 도구·클래스 배치·준비·전체 상태 관찰 방법과 내부 `dict` 사용이 합의되었다. Python·FastAPI·uvicorn 지원 버전은 미정이며 HTTP 상세는 [HTTP 담당 범위](01-http-scope.md)를 따른다. 테스트 입력과 기대 결과를 구현 편의에 맞춰 변경하지 않는다.
 - 해시 충돌·리사이즈는 Python `dict`에 맡기며 별도의 해시 테이블을 직접 구현하지 않는다. 아래 미정 동작에는 기대 결과를 지어내지 않는다.
 
 ## 남은 미정 사항

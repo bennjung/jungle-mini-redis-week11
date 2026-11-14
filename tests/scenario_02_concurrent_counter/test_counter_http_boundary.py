@@ -5,6 +5,7 @@ import json
 from unittest.mock import Mock, call
 
 import pytest
+from fastapi.testclient import TestClient
 
 from app import create_app
 from tests.scenario_02_concurrent_counter.contract_helpers import check
@@ -15,8 +16,8 @@ from tests.scenario_02_concurrent_counter.test_counter_http import BAD_BODIES
 def boundary():
     storage = Mock(spec_set=["set", "get", "delete", "incr", "decr"])
     app = create_app(storage)
-    app.config.update(TESTING=True, PROPAGATE_EXCEPTIONS=False)
-    return app.test_client(), storage
+    # 미처리 예외도 실제 서버처럼 500 응답으로 관찰한다.
+    return TestClient(app, raise_server_exceptions=False), storage
 
 
 @pytest.mark.parametrize("operation", ["incr", "decr"])
@@ -74,7 +75,8 @@ def test_a03_error_mapping(boundary, operation, status, result):
 @pytest.mark.parametrize("body", BAD_BODIES[:9])
 def test_a04_bad_shape_or_fields_do_not_call_storage(boundary, operation, body):
     client, storage = boundary
-    response = client.post(f"/kv/{operation}", data=json.dumps(body), content_type="application/json")
+    response = client.post(f"/kv/{operation}", content=json.dumps(body),
+                           headers={"Content-Type": "application/json"})
     check(response, 400, {"error": "INVALID_INPUT"})
     assert storage.mock_calls == []
 
@@ -91,7 +93,8 @@ def test_a04_wrong_condition_does_not_call_storage(boundary, operation):
 @pytest.mark.parametrize("operation", ["incr", "decr"])
 def test_a04_malformed_json_does_not_call_storage(boundary, operation):
     client, storage = boundary
-    response = client.post(f"/kv/{operation}", data=b'{"key":', content_type="application/json")
+    response = client.post(f"/kv/{operation}", content=b'{"key":',
+                           headers={"Content-Type": "application/json"})
     check(response, 400, {"error": "INVALID_INPUT"})
     assert storage.mock_calls == []
 
@@ -126,5 +129,5 @@ def test_a07_json_set_and_return_types(boundary, value):
         storage.reset_mock()
         result = {"found": True, "value": deepcopy(value)}
         getattr(storage, operation).return_value = result
-        check(client.open("/kv", method=method, query_string={"key": "sample:json"}), 200, result)
+        check(client.request(method, "/kv", params={"key": "sample:json"}), 200, result)
         assert storage.mock_calls == [getattr(call, operation)("sample:json")]

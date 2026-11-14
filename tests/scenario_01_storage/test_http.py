@@ -1,6 +1,6 @@
 """문서 01의 HTTP 경계 검증. 실제 저장·삭제·상태 보존은 검증하지 않는다.
 
-대상: app.create_app(storage)가 반환하는 실제 Flask 앱.
+대상: app.create_app(storage)가 반환하는 실제 FastAPI 앱.
 저장소는 합의된 set/get/delete 호출을 기록하고 요청별 지정 결과만 반환한다.
 실행: python3 -m pytest tests/scenario_01_storage/test_http.py -v
 """
@@ -9,6 +9,7 @@ from copy import deepcopy
 from unittest.mock import Mock, call
 
 import pytest
+from fastapi.testclient import TestClient
 
 
 @pytest.fixture
@@ -18,8 +19,7 @@ def exchange():
 
     storage = Mock(spec_set=["set", "get", "delete"])
     app = create_app(storage)
-    app.config["TESTING"] = True
-    client = app.test_client()
+    client = TestClient(app)
 
     def request_and_check(method, key, result, *, value=None, status=200):
         """각 요청 완료 직후 호출 및 응답을 확인하고 다음 요청으로 넘어간다."""
@@ -32,14 +32,14 @@ def exchange():
             expected_call = call.set(key, value)
         else:
             # 쿼리 인코딩은 클라이언트에 맡기고 해석된 키의 전달을 검증한다.
-            response = client.open("/kv", method=method, query_string={"key": key})
+            response = client.request(method, "/kv", params={"key": key})
             expected_call = getattr(call, operation)(key)
 
         # 삭제 전 사전 조회 등 추가 호출도 거절한다.
         assert storage.mock_calls == [expected_call]
         assert response.status_code == status
-        assert response.is_json
-        body = response.get_json()
+        assert response.headers["content-type"].startswith("application/json")
+        body = response.json()
         assert type(body) is dict
         assert body == result  # found=False일 때 value 필드 생략도 확인한다.
         for field, expected in result.items():
@@ -171,8 +171,7 @@ def http_boundary():
 
     storage = Mock(spec_set=["set", "get", "delete"])
     app = create_app(storage)
-    app.config.update(TESTING=True, PROPAGATE_EXCEPTIONS=False)
-    return app.test_client(), storage
+    return TestClient(app, raise_server_exceptions=False), storage
 
 
 @pytest.mark.parametrize(
@@ -192,24 +191,26 @@ def http_boundary():
 def test_put_format_error_rejected_without_storage_call(http_boundary, body):
     """JSON·객체 구조·필수 필드 오류는 HTTP가 400 JSON으로 직접 거절한다."""
     client, storage = http_boundary
-    response = client.put("/kv", data=body, content_type="application/json")
+    response = client.put(
+        "/kv", content=body, headers={"Content-Type": "application/json"}
+    )
 
     assert storage.mock_calls == []
     assert response.status_code == 400
-    assert response.is_json
-    assert response.get_json() == {"error": "INVALID_INPUT"}
+    assert response.headers["content-type"].startswith("application/json")
+    assert response.json() == {"error": "INVALID_INPUT"}
 
 
 @pytest.mark.parametrize("method", ["GET", "DELETE"])
 def test_missing_query_key_rejected_without_storage_call(http_boundary, method):
     """쿼리 key 누락은 빈 key와 구분하며 저장소에 전달하지 않는다."""
     client, storage = http_boundary
-    response = client.open("/kv", method=method)
+    response = client.request(method, "/kv")
 
     assert storage.mock_calls == []
     assert response.status_code == 400
-    assert response.is_json
-    assert response.get_json() == {"error": "INVALID_INPUT"}
+    assert response.headers["content-type"].startswith("application/json")
+    assert response.json() == {"error": "INVALID_INPUT"}
 
 
 @pytest.mark.parametrize("field", ["key", "value"])
@@ -236,17 +237,19 @@ def test_put_type_validation_delegated_to_storage(http_boundary, field, invalid_
     assert type(args[0]) is type(body["key"])
     assert type(args[1]) is type(body["value"])
     assert response.status_code == 400
-    assert response.is_json
-    assert response.get_json() == {"error": "INVALID_INPUT"}
+    assert response.headers["content-type"].startswith("application/json")
+    assert response.json() == {"error": "INVALID_INPUT"}
 
 
 @pytest.mark.parametrize(
     "method,operation", [("PUT", "set"), ("GET", "get"), ("DELETE", "delete")]
 )
-def test_unexpected_storage_error_is_not_invalid_input(http_boundary, method, operation):
+def test_unexpected_storage_error_is_not_invalid_input(method, operation):
     """테스트용 예외 전파 모드에서는 내부 예외를 입력 오류로 바꾸지 않는다."""
-    client, storage = http_boundary
-    client.application.config["PROPAGATE_EXCEPTIONS"] = True
+    from app import create_app
+
+    storage = Mock(spec_set=["set", "get", "delete"])
+    client = TestClient(create_app(storage))
     error = RuntimeError("unexpected storage failure")
     getattr(storage, operation).side_effect = error
 
@@ -254,7 +257,7 @@ def test_unexpected_storage_error_is_not_invalid_input(http_boundary, method, op
         if method == "PUT":
             client.put("/kv", json={"key": "sample:one", "value": "hello"})
         else:
-            client.open("/kv", method=method, query_string={"key": "sample:one"})
+            client.request(method, "/kv", params={"key": "sample:one"})
 
     assert caught.value is error
     expected_call = (
