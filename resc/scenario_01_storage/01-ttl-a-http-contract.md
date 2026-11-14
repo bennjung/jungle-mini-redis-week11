@@ -10,7 +10,7 @@
 
 | 항목 | 내용 |
 | --- | --- |
-| 수정 파일 | `app.py`, `tests/scenario_01_storage/test_ttl_http.py`, `tests/scenario_04_response_cache/test_weather_cache.py` |
+| 수정 파일 | `app.py`(HTTP handler), `tests/scenario_01_storage/test_ttl_http.py`, `tests/scenario_04_response_cache/test_weather_cache.py` |
 | 담당 함수 | `put_kv`, `expire_kv`, `ttl_kv`, `persist_kv` |
 | 테스트 | T1-20, T1-21 |
 
@@ -63,6 +63,7 @@
 ## 금지
 
 - `storage.py` 수정.
+- `app.py`의 lifespan 타이머 블록 수정(C 소유).
 - TTL 타입·범위 판정, 저장 상태 사전 조회, TTL 계산.
 - `/weather` 엔드포인트·별도 앱 프로세스 추가.
 - 테스트를 통과시키기 위해 기대 결과를 완화하거나 `skip`·`xfail`로 돌리는 것.

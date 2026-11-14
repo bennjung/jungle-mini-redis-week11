@@ -34,7 +34,7 @@
 | T1 | MySQL | 기존 시험 전용 `benchmark_counter` | JDBC 직접 호출, HTTP 서버 없음 | MySQL 8.4.13, Connector/J 9.2.0 |
 | T2 | Flask | `git show e61a81a:app.py` + 현재 `storage.py` | Flask 개발 서버, `threaded=False`, `use_reloader=False`, `127.0.0.1:5000` | Flask 3.1.3, Werkzeug 3.1.9 |
 | T3 | FastAPI | 현재 `app.py` + 현재 `storage.py` | uvicorn `workers=1`, `127.0.0.1:5000` | fastapi 0.162.7, uvicorn 0.54.0 |
-| T4 | FastAPI + timer | T3 + timer 브랜치 | T3와 같고 timer가 추가된 구성. 세부는 8절 | 3절과 동일 + timer 계약 |
+| T4 | FastAPI + timer | T3 + 타이머 구현 | T3와 같고 timer가 추가된 구성. 세부는 8절 | 3절과 동일 + timer 계약 |
 
 - T2와 T3는 `app.py`만 다르고 `storage.py`는 같다. 측정 시 `storage.py` SHA256을 기록하고, 달라지면 같은 묶음에 섞지 않는다.
 - 현재 `.venv`에는 Flask가 없다. T2는 고정 버전을 설치한 별도 측정 환경을 쓴다.
@@ -101,7 +101,7 @@
 - **사용자 결정:** timer 구현이 끝난 뒤 그 구현을 기준으로 T4의 정의와 측정 계약을 정한다. 구현 전에 T4를 확정하지 않는다.
 - **결정 반영:** D-24에서 active 만료를 FastAPI `lifespan`의 100ms 주기 타이머로 확정했다. T4는 그 타이머를 켠 구성이다.
 - timer 구현이 끝나면 T4에서 고정할 것: 주기·표본 수·반복 상한(현재 100ms·표본 20개·최대 2회), 저장소 접근 방식(같은 이벤트 루프의 동기 호출), 카운터 키에 TTL을 거는지 여부.
-- 선행 의존: timer는 TTL 저장소 구현(`_expires`·`_ttl_keys`·`_ttl_pos`, lazy/active) 위에 얹는다. TTL 구현이 먼저다. timer 브랜치는 그 뒤에 만든다(제안 이름 `feature/ttl-active-timer`).
+- 선행 의존: timer는 TTL 저장소 구현(`_expires`·`_ttl_keys`·`_ttl_pos`, lazy/active) 위에 얹는다. TTL 구현이 먼저다. 타이머 task 구현은 C의 TTL 작업에 포함된다.
 - 부하 조건도 timer 구현 후 함께 정한다. 후보:
   - (a) 기존 카운터 부하만 쓴다. timer가 요청 경로에 주는 영향만 관찰되고, TTL 키가 없으면 정리 표본이 비어 비용이 검출 한계 아래일 수 있다.
   - (b) 카운터 부하에 TTL 키를 미리 채운다. 정리 비용이 포함되지만 사전 상태가 T2·T3와 달라져 직접 비교할 수 없다.
@@ -110,7 +110,7 @@
 
 ## 9. 실행 절차
 
-1. timer 브랜치를 구현·병합한 뒤 T4 정의와 측정 계약을 확정한다. TTL 저장소 구현이 그 선행이다. 전체 테스트 통과를 확인한다.
+1. 타이머 구현이 끝난 뒤 T4 정의와 측정 계약을 확정한다. TTL 저장소 구현이 그 선행이다. 전체 테스트 통과를 확인한다.
 2. 하네스를 변경하고 M3 도구 검증 83건을 다시 통과시킨다.
 3. 환경 기록을 만든다. 버전·해시·호스트·MySQL 설정·Flask 환경을 포함한다.
 4. 연결 확인용 짧은 실행을 대상별 N=1,000·C=1로 1회씩 한다. 기록만 하고 결과에 넣지 않는다. 이는 새 N 결정이 아니다.

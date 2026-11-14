@@ -3,8 +3,8 @@
 ## 기준과 상태
 
 - 기준: [01 TTL 계약](01-ttl-contract.md), [04 날씨 TTL/LDC 결정 로그](../scenario_04_response_cache/04-weather-ttl-decision-log.md), [REST API 9절](../../rest-api.md).
-- 이 문서는 확정된 TTL 행동을 정확한 입력·관찰로 구체화한 테스트 계약이다. 아래 표본은 계약을 검증하기 위한 입력이며 새 기능·정책을 추가하지 않는다. 2026-11-14에 T1-01~18, T1-20~21, T1-23의 입력·기대를 동결했다. T1-19는 후속 timer 브랜치에서 동결한다.
-- 저장소 코어 테스트: `tests/scenario_01_storage/test_ttl_storage.py`. Active 만료 테스트: `tests/scenario_01_storage/test_ttl_active.py`. HTTP 표면 테스트: `tests/scenario_01_storage/test_ttl_http.py`. 타이머 task 테스트: `tests/scenario_01_storage/test_ttl_timer.py`(후속 timer 브랜치). 날씨 소비자 기능 테스트: `tests/scenario_04_response_cache/test_weather_cache.py`.
+- 이 문서는 확정된 TTL 행동을 정확한 입력·관찰로 구체화한 테스트 계약이다. 아래 표본은 계약을 검증하기 위한 입력이며 새 기능·정책을 추가하지 않는다. 2026-11-14에 T1-01~18, T1-20~21, T1-23의 입력·기대를 동결했다. T1-19는 C가 타이머와 함께 동결한다.
+- 저장소 코어 테스트: `tests/scenario_01_storage/test_ttl_storage.py`. Active 만료 테스트: `tests/scenario_01_storage/test_ttl_active.py`. HTTP 표면 테스트: `tests/scenario_01_storage/test_ttl_http.py`. 타이머 task 테스트: `tests/scenario_01_storage/test_ttl_timer.py`(C). 날씨 소비자 기능 테스트: `tests/scenario_04_response_cache/test_weather_cache.py`.
 - 테스트 helper: `tests/scenario_01_storage/ttl_state_helpers.py`, `tests/scenario_01_storage/ttl_clock_helpers.py`.
 - 구현 전에 테스트를 실행해 실패 원인을 확인하고, 구현 뒤 같은 테스트를 다시 실행한다. 테스트에 맞추어 TTL 계약을 완화하지 않는다.
 - `[미정]` 항목은 기대 결과를 임의로 만들지 않는다. 결정 전에는 해당 테스트를 작성하지 않거나 `[미검증]`으로 남긴다.
@@ -18,7 +18,7 @@
   - `clock()`은 정수 epoch ms를 반환한다. 기본값은 실제 벽시계다.
   - `sampler(keys, k)`는 `keys`에서 최대 `k`개를 반환한다. 기본값은 중복 없는 무작위 표본이다.
   - `MiniRedis()`는 기존처럼 동작해야 한다. 이 인터페이스는 2026-11-14에 동결했다.
-- `[확정]` active tick은 테스트에서 `_maybe_active_expire()` 또는 `_active_expire_cycle(now)`를 직접 호출해 재현한다. 실제 100ms 타이머를 기다리지 않는다. 타이머 task의 주기·유휴 실행은 T1-19(후속 timer 브랜치)에서 확인한다.
+- `[확정]` active tick은 테스트에서 `_maybe_active_expire()` 또는 `_active_expire_cycle(now)`를 직접 호출해 재현한다. 실제 100ms 타이머를 기다리지 않는다. 타이머 task의 주기·유휴 실행은 T1-19(C)에서 확인한다.
 - `snapshot(store)`는 기존처럼 `_data`의 사본을 반환한다. `ttl_snapshot(store)`는 `(_expires.copy(), list(_ttl_keys), _ttl_pos.copy())`를 반환한다. 테스트 전용이며 실행 코드의 메서드가 아니다.
 - 불변 조건 검사: `set(_expires) == set(_ttl_keys) == set(_ttl_pos)`, 모든 키의 위치 일치, 세 길이 일치, `_ttl_keys` 중복 없음.
 - 각 호출 직후 반환값 전체와 `_data`·TTL 구조를 확인한다. 반환값의 필드 구성과 타입을 비교하고, 딕셔너리 순서는 강제하지 않는다.
@@ -136,7 +136,7 @@
 
 ## T1-14. active 만료 — 기본 표본
 
-> T1-14~18은 tick 함수를 직접 호출하고 `keys[:k]` 고정 표본 선택기를 쓰는 조건부 초안이다. T1-19는 후속 timer 브랜치의 테스트다.
+> T1-14~18은 tick 함수를 직접 호출하고 `keys[:k]` 고정 표본 선택기를 쓰는 조건부 초안이다. T1-19는 C의 타이머 테스트다.
 
 - 사전 상태: TTL 1_000ms인 키 25개를 `set`으로 만든다. `advance(1_000)`.
 - 입력: 표본 선택기는 현재 `_ttl_keys`의 앞에서부터 최대 20개를 반환한다. `_maybe_active_expire()`를 호출한다.
@@ -162,7 +162,7 @@
 - 사전 상태: TTL 60_000ms인 키 1개.
 - 입력: `_maybe_active_expire()`를 두 번 호출한다.
 - 기대: 표본 선택기 호출은 2회다. tick 안에 100ms 게이트를 두지 않는다.
-- 유지: 100ms 주기는 타이머 task가 지킨다. task의 주기·유휴 실행은 T1-19(후속 timer 브랜치)에서 확인한다.
+- 유지: 100ms 주기는 타이머 task가 지킨다. task의 주기·유휴 실행은 T1-19(C)에서 확인한다.
 
 ## T1-18. active 만료 — 살아 있는 키와 갱신된 TTL 보존
 
@@ -171,12 +171,12 @@
 - 기대: 둘 다 만료되지 않았으므로 제거되지 않는다.
 - 추가: 키 하나의 TTL을 1_000ms로 줄이고 `advance(1_000)` 뒤 같은 키를 표본으로 반환하기 전에 `expire`로 TTL을 60_000ms로 갱신한다. 트리거 후 그 키는 삭제되지 않는다. 삭제 전 현재 `_expires`를 확인하는 동작을 검증한다.
 
-## T1-19. 타이머 — 유휴 상태 (후속 timer 브랜치)
+## T1-19. 타이머 — 유휴 상태
 
 - 사전 상태: TTL 1_000ms인 키 1개. `advance(1_000)`.
 - 입력: 요청을 보내지 않고 lifespan 타이머 task를 100ms 이상 실행한다.
 - 기대: 요청이 없어도 tick이 실행되어 만료 키가 제거된다.
-- 유지: 타이머 task 구현과 함께 후속 브랜치에서 작성한다. 이번 조각에는 포함하지 않는다.
+- 유지: C가 타이머 task와 함께 작성한다. 테스트에서 주기를 제어하는 방법은 타이머 설계에서 정한다.
 
 ## T1-20. HTTP TTL 표면
 
@@ -234,13 +234,13 @@
 ## T1-22. 확정 요약 (테스트 대상 아님)
 
 - `[확정]` active 표본은 중복 없이 뽑는다(`random.sample`). `T1-14`~`T1-18`의 고정 표본 선택기는 이 조건과 맞는다.
-- `[확정]` active 만료는 lifespan의 100ms 주기 타이머가 실행한다(D-24). `T1-14`~`T1-18`은 tick 함수를 직접 호출한다. `T1-19`는 후속 timer 브랜치에서 작성한다.
+- `[확정]` active 만료는 lifespan의 100ms 주기 타이머가 실행한다(D-24). `T1-14`~`T1-18`은 tick 함수를 직접 호출한다. `T1-19`는 C가 타이머와 함께 작성한다.
 - `[확정]` `incr`·`decr`는 lazy 만료 검사를 하고, 만료된 키는 `NOT_FOUND`, 살아 있는 키의 TTL은 유지한다(T1-23).
 - `[확정]` `POST /kv/expire`·`POST /kv/persist`는 계약 필드 외 추가 필드를 무시한다. 별도 테스트를 만들지 않는다.
 
 ## 실행·구현 순서
 
-1. 테스트 ID와 입력은 동결됐다(2026-11-14). T1-19는 후속 timer 브랜치에서 동결한다.
+1. 테스트 ID와 입력은 동결됐다(2026-11-14). T1-19는 C가 타이머와 함께 동결한다.
 2. 저장소 테스트를 먼저 작성하고, 구현 전에 실행해 실패 원인을 기록한다. 동결된 입력만 사용하고, 미정 항목이 생기면 작성하지 않고 사용자 확인을 받는다.
 3. HTTP 표면 테스트와 날씨 소비자 테스트를 작성한다.
 4. `storage.py`의 TTL 저장·조회·삭제·lazy/active를 구현하고 같은 테스트를 다시 실행한다.

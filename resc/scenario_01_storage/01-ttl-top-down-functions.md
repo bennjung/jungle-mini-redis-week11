@@ -4,7 +4,7 @@
 
 - 기준: [01 TTL 계약](01-ttl-contract.md), [01 TTL 테스트 계약](01-ttl-test-cases.md), [REST API 9절](../../rest-api.md), [04 날씨 TTL/LDC 결정 로그](../scenario_04_response_cache/04-weather-ttl-decision-log.md).
 - 이 문서는 TTL 기능을 기존 `app.py` → `storage.py` 흐름에 배치하고, 테스트 작성부터 구현까지 3인 분업 경계를 정하는 설계 초안이다.
-- `[확정]` 2026-11-14 구현 범위: 01 TTL 전체(저장소 코어·active tick·HTTP 표면·`incr`/`decr` lazy)와 04 날씨 소비자 테스트(T1-21)까지를 한 조각으로 구현한다. 타이머 task와 T1-19는 후속 timer 브랜치에서 한다. 03 성능 재측정·대량 무효화는 제외하고, 원본 API 실패 응답은 MiniRedis 범위가 아니므로 다루지 않는다.
+- `[확정]` 2026-11-14 구현 범위: 01 TTL 전체(저장소 코어·active tick·HTTP 표면·`incr`/`decr` lazy)와 04 날씨 소비자 테스트(T1-21)까지를 한 조각으로 구현한다. 타이머 task와 T1-19는 C가 구현한다. 03 성능 재측정·대량 무효화는 제외하고, 원본 API 실패 응답은 MiniRedis 범위가 아니므로 다루지 않는다.
 - 함수 이름·인자·내부 helper 이름은 2026-11-14에 동결했다. 이후 변경은 계약 수정과 사용자 확인을 거친다.
 - `[미정]` 항목은 구현으로 확정하지 않는다. 담당 범위의 테스트를 작성하기 전에 사용자 확인을 받는다.
 - 새 계층·큐·잠금·별도 저장소를 만들지 않는다. 기존 `create_app(storage)`와 단일 `MiniRedis` 인스턴스, 단일 이벤트 루프·`uvicorn workers=1` 서버를 유지한다.
@@ -18,7 +18,7 @@ HTTP — app.py
   GET    /kv/ttl      → storage.ttl(key)
   POST   /kv/persist  → storage.persist(key)
 
-lifespan 타이머 task — app.py (후속 timer 브랜치)
+lifespan 타이머 task — app.py (C)
   100ms마다           → storage._maybe_active_expire()  (C: tick 진입점)
 
 저장소 — storage.py
@@ -31,7 +31,7 @@ lifespan 타이머 task — app.py (후속 timer 브랜치)
     → _drop_key(key)                (B: 네 구조에서 제거)
 ```
 
-- `_maybe_active_expire`는 lifespan 타이머 task가 100ms마다 호출한다. public 메서드는 active를 직접 호출하지 않는다(D-24). 타이머 task 구현은 후속 브랜치에서 한다.
+- `_maybe_active_expire`는 lifespan 타이머 task가 100ms마다 호출한다. public 메서드는 active를 직접 호출하지 않는다(D-24). 타이머 task는 C가 구현한다.
 - `_drop_key`는 TTL 구조를 바꾸는 유일한 제거 경로다. B가 소유하고 C는 호출만 한다. C가 `_expires`·`_ttl_keys`·`_ttl_pos`를 직접 수정하지 않는다.
 - `_set_ttl`·`_clear_ttl`은 B만 호출한다. C는 active 만료에서 `_drop_key`만 쓴다.
 - HTTP는 저장 상태를 미리 조회하거나 TTL을 계산하지 않는다. 저장소는 HTTP 상태 코드를 반환하지 않는다.
@@ -47,6 +47,7 @@ lifespan 타이머 task — app.py (후속 timer 브랜치)
 ### 1.2 타이머 실행 구조
 
 - `[확정]` active 만료는 FastAPI `lifespan`이 소유하는 100ms 주기 task가 실행한다(D-24). Redis의 serverCron·activeExpireCycle과 같은 시간 기준이다.
+- C가 `app.py`의 lifespan 블록에서 task를 만들고 종료 시 취소·대기한다. HTTP handler는 A 소유다.
 - 타이머는 같은 이벤트 루프에서 돈다. tick의 저장소 호출은 동기 함수로 끝나므로 사이클 중간에 요청 처리가 끼어들지 않는다. 별도 스레드·큐·잠금을 만들지 않는다.
 - 요청이 없어도 실행되므로 유휴 상태의 콜드 키가 회수된다. 앱이 종료되면 task를 취소하고 대기한다.
 - 테스트는 실제 100ms를 기다리지 않는다. `FakeClock`과 주입한 표본 선택기로 tick 함수를 직접 호출해 재현하고, 타이머 task의 시작·주기·종료는 별도 통합 테스트에서 확인한다.
@@ -101,15 +102,15 @@ lifespan 타이머 task — app.py (후속 timer 브랜치)
 
 | 역할 | 수정 파일 | 담당 함수 | 테스트 | 선행 조건 |
 | --- | --- | --- | --- | --- |
-| [**A. HTTP 경계·소비자**](01-ttl-a-http-contract.md) | `app.py`, `tests/scenario_01_storage/test_ttl_http.py`, `tests/scenario_04_response_cache/test_weather_cache.py` | `put_kv`, `expire_kv`, `ttl_kv`, `persist_kv` | T1-20, T1-21 | B의 저장소 인터페이스, C의 `FakeClock` |
+| [**A. HTTP 경계·소비자**](01-ttl-a-http-contract.md) | `app.py`(HTTP handler), `tests/scenario_01_storage/test_ttl_http.py`, `tests/scenario_04_response_cache/test_weather_cache.py` | `put_kv`, `expire_kv`, `ttl_kv`, `persist_kv` | T1-20, T1-21 | B의 저장소 인터페이스, C의 `FakeClock` |
 | [**B. TTL 코어**](01-ttl-b-core-contract.md) | `storage.py`의 TTL 코어·public 메서드, `tests/scenario_01_storage/test_ttl_storage.py`, `tests/scenario_01_storage/ttl_state_helpers.py` | `__init__`, `_now_ms`, `_drop_key`, `_set_ttl`, `_clear_ttl`, `_lazy_expire`, `set`, `get`, `delete`, `expire`, `ttl`, `persist`, `incr`, `decr`, `_adjust` | T1-01~13, T1-23 | 없음 |
-| [**C. Active 만료**](01-ttl-c-active-contract.md) | `storage.py`의 active 구간, `tests/scenario_01_storage/test_ttl_active.py`, `tests/scenario_01_storage/ttl_clock_helpers.py` | `_maybe_active_expire`, `_active_expire_cycle` | T1-14~18 | B의 `_now_ms`·`_drop_key`·TTL 구조 |
+| [**C. Active 만료·타이머**](01-ttl-c-active-contract.md) | `storage.py`의 active 구간, `app.py`의 lifespan 타이머 블록, `tests/scenario_01_storage/test_ttl_active.py`, `tests/scenario_01_storage/ttl_clock_helpers.py`, `tests/scenario_01_storage/test_ttl_timer.py` | `_maybe_active_expire`, `_active_expire_cycle`, `_timer_loop` | T1-14~19 | B의 `_now_ms`·`_drop_key`·TTL 구조 |
 | **통합** | `storage.py` 병합, 전체 테스트 실행 | 함수 단위 병합·회귀 확인 | T1-01~18, T1-20~21 | A·B·C |
 
 - B가 `storage.py` 코어의 주 담당이다. C의 active 함수는 같은 파일에 들어가므로 B가 함수 단위로 병합한다. 어느 한쪽의 파일 전체로 다른 쪽을 덮어쓰지 않는다.
 - 역할별 동결 계약: [A. HTTP 경계·소비자](01-ttl-a-http-contract.md), [B. TTL 코어](01-ttl-b-core-contract.md), [C. Active tick](01-ttl-c-active-contract.md). 이 문서는 분업 경계와 공통 계약을 소유하고, 각 역할의 세부 동결은 해당 문서를 따른다.
-- A는 `storage.py`를 수정하지 않는다. C는 `app.py`를 수정하지 않는다.
-- 테스트 파일은 담당별로 분리한다. 테스트 계약 문서의 파일 목록은 이 분담에 맞춰 `test_ttl_storage.py`(B)·`test_ttl_active.py`(C)·`test_ttl_http.py`·`test_weather_cache.py`(A)로 갱신한다. lifespan 타이머 task와 T1-19는 후속 timer 브랜치의 `test_ttl_timer.py`로 둔다.
+- A는 `app.py`의 HTTP handler, C는 `app.py`의 lifespan 타이머 블록을 소유한다. 서로의 영역을 수정하지 않는다. 두 사람 모두 `storage.py`를 수정하지 않는다.
+- 테스트 파일은 담당별로 분리한다. 테스트 계약 문서의 파일 목록은 이 분담에 맞춰 `test_ttl_storage.py`(B)·`test_ttl_active.py`·`test_ttl_timer.py`(C)·`test_ttl_http.py`·`test_weather_cache.py`(A)로 갱신한다.
 - B가 가장 긴 경로다. A와 C는 B의 인터페이스가 동결된 뒤 테스트를 먼저 작성하고, 구현은 각자 범위에서 병렬로 진행할 수 있다.
 
 ## 3. 공통 계약
@@ -280,15 +281,15 @@ def _active_expire_cycle(self, now_ms):
 - 삭제 전에 현재 `_expires`와 키 존재를 확인한다. 표본을 뽑은 뒤 TTL이 갱신됐거나 키가 사라졌으면 삭제하지 않는다.
 - `self._sampler`가 `None`이면 중복 없는 기본 표본을 쓴다. `[확정]` 표본 중복 정책은 중복 없음이다.
 - 100ms 주기는 타이머 task가 지킨다. `_maybe_active_expire`는 호출될 때마다 사이클을 실행한다.
-- C는 public 메서드 본문·HTTP 코드를 수정하지 않는다. 타이머 task는 후속 timer 브랜치에서 `app.py`에 추가한다.
+- C는 public 메서드 본문·HTTP 코드를 수정하지 않는다. 타이머 task는 C가 `app.py`의 lifespan 블록에 추가한다.
 
 ## 5. 역할별 수정 범위와 금지
 
 ### A. HTTP 경계·소비자
 
-- **수정 가능:** `app.py`의 TTL 요청 처리, `test_ttl_http.py`, `test_weather_cache.py`.
+- **수정 가능:** `app.py`의 TTL 요청 처리(HTTP handler), `test_ttl_http.py`, `test_weather_cache.py`.
 - **필수:** 본문 구조·필수 필드 검사, 저장소 호출 한 번, `INVALID_INPUT` → 400, 정상 → 200. `PUT /kv`의 `ttl` 생략·null을 `None`으로 전달.
-- **금지:** `storage.py` 수정, TTL 타입·범위 판정, 저장 상태 사전 조회, TTL 계산, `/weather` 엔드포인트 추가, 별도 날씨 앱 프로세스.
+- **금지:** `storage.py` 수정, `app.py`의 lifespan 타이머 블록 수정, TTL 타입·범위 판정, 저장 상태 사전 조회, TTL 계산, `/weather` 엔드포인트 추가, 별도 날씨 앱 프로세스.
 - **독립 검증:** T1-20은 실제 `MiniRedis` 연결 HTTP, T1-21은 KV API + 가짜 원본이다. 원본 API 실패는 MiniRedis 계약 범위가 아니므로 실패 주입 테스트를 만들지 않는다.
 
 ### B. TTL 코어
@@ -298,16 +299,16 @@ def _active_expire_cycle(self, now_ms):
 - **금지:** `app.py` 수정, `_maybe_active_expire`·`_active_expire_cycle` 본문 작성, `_drop_key` 밖에서 TTL 구조 직접 변경.
 - **독립 검증:** T1-01~13. 각 연산 뒤 `ttl_snapshot`과 불변 조건을 확인한다. 기존 `tests/scenario_01_storage/test_storage.py`·`test_storage_invalid_input.py`가 계속 통과해야 한다.
 
-### C. Active 만료
+### C. Active 만료·타이머
 
-- **수정 가능:** `storage.py`의 `_maybe_active_expire`·`_active_expire_cycle`, `test_ttl_active.py`, `ttl_clock_helpers.py`.
-- **필수:** tick마다 사이클 최대 2회, 최대 20개 표본, 25% 이상 1회 추가, 삭제 전 현재 TTL 확인, `_drop_key`만 사용. `FakeClock`·`FirstKSampler` 제공.
-- **금지:** `app.py` 수정(타이머 task는 후속 timer 브랜치), public 메서드 본문 수정, TTL 구조 직접 변경, 별도 스레드·큐 도입.
-- **독립 검증:** T1-14~18. tick 함수를 직접 호출해 표본·25%·반복 상한·보존을 확인한다. 100ms 주기와 유휴 실행(T1-19)은 후속 timer 브랜치에서 확인한다.
+- **수정 가능:** `storage.py`의 `_maybe_active_expire`·`_active_expire_cycle`, `app.py`의 lifespan 타이머 블록, `test_ttl_active.py`, `test_ttl_timer.py`, `ttl_clock_helpers.py`.
+- **필수:** tick마다 사이클 최대 2회, 최대 20개 표본, 25% 이상 1회 추가, 삭제 전 현재 TTL 확인, `_drop_key`만 사용. `FakeClock`·`FirstKSampler` 제공. lifespan에서 task 생성·취소·대기.
+- **금지:** `app.py`의 HTTP handler 수정, public 메서드 본문 수정, TTL 구조 직접 변경, 별도 스레드·큐 도입.
+- **독립 검증:** T1-14~19. T1-14~18은 tick 함수를 직접 호출해 표본·25%·반복 상한·보존을 확인하고, T1-19는 타이머의 유휴 실행을 확인한다.
 
 ### 통합
 
-- B가 `storage.py`에서 C의 active 함수를 함수 단위로 병합한다. C의 함수 본문과 A의 타이머 호출을 함께 확인한다.
+- B가 `storage.py`에서 C의 active 함수를 함수 단위로 병합한다. C의 함수 본문과 lifespan 타이머 호출을 함께 확인한다.
 - A·B·C의 테스트를 모두 실행하고, 기존 01 저장소 테스트와 04 날씨 테스트의 회귀를 확인한다.
 - 테스트 계약의 호출 대상·입력·검증 시점이 이 문서와 일치하는지 대조한다. 미정 항목은 `[미검증]`으로 남긴다.
 - 테스트를 통과시키기 위해 계약을 완화하거나 `skip`·`xfail`로 돌리지 않는다.
@@ -316,11 +317,11 @@ def _active_expire_cycle(self, now_ms):
 
 1. **B의 인터페이스 동결** — `MiniRedis(clock, sampler)`, 자료구조, `_now_ms`, `_drop_key`, `_set_ttl`, `_clear_ttl`, `_lazy_expire`, public 메서드 시그니처.
 2. **C의 helper 먼저** — `FakeClock`·`FirstKSampler`와 `_active_expire_cycle` stub. tick의 입력·반환을 고정한다.
-3. **A·B·C의 테스트 작성** — A는 T1-20~21, B는 T1-01~13, C는 T1-14~18. 구현 전에 실행해 실패 원인을 기록한다.
+3. **A·B·C의 테스트 작성** — A는 T1-20~21, B는 T1-01~13, C는 T1-14~19. 구현 전에 실행해 실패 원인을 기록한다.
 4. **B 코어 구현** — T1-01~13 통과. A의 HTTP 테스트가 저장소 경로로 통과할 수 있게 한다.
 5. **A의 HTTP·소비자 구현** — T1-20·21 통과.
-6. **C의 active 구현** — T1-14~18 통과. B가 병합.
-7. **통합 검증** — 전체 TTL 테스트, 기존 01·02 회귀, 04 날씨 경로. 03 성능 재측정은 별도다.
+6. **C의 active·타이머 구현** — T1-14~19 통과. B가 active 함수를 병합한다.
+7. **통합 검증** — 전체 TTL 테스트, 타이머 시작·종료, 기존 01·02 회귀, 04 날씨 경로. 03 성능 재측정은 별도다.
 
 - 1~2는 공통 선행 조건이다. 3은 1~2 뒤에 병렬로 시작할 수 있다. 4~6은 각자 범위에서 병렬로 진행하되, B의 `storage.py` 병합이 마지막에 필요하다.
 - A는 B의 구현을 기다리지 않고 인터페이스에 맞춰 `app.py`를 작성할 수 있다. 테스트는 B의 코어가 준비될 때까지 실패한다.
@@ -338,21 +339,21 @@ def _active_expire_cycle(self, now_ms):
 | `_maybe_active_expire`·`_active_expire_cycle` | T1-14~18 | C |
 | `FakeClock`·`FirstKSampler` | T1-14~18, T1-21 | C |
 | `ttl_snapshot`·`assert_ttl_invariants` | T1-01~13 | B |
-| lifespan 타이머 task | T1-19 (후속 timer 브랜치) | 후속 |
+| lifespan 타이머 task | T1-19 | C |
 
 ## 8. 동결 결과
 
 - `[확정]` `MiniRedis(clock=None, sampler=None)` 인터페이스. `clock()`은 정수 epoch ms, `sampler(keys, k)`는 최대 `k`개를 반환하고 기본값은 실제 벽시계·`random.sample`이다.
-- `[확정]` active 만료는 lifespan의 100ms 주기 타이머가 실행한다(D-24). public 메서드는 active를 호출하지 않는다. 타이머 task 구현과 T1-19는 후속 timer 브랜치에서 하고, 이번 조각은 tick 함수까지다.
+- `[확정]` active 만료는 lifespan의 100ms 주기 타이머가 실행한다(D-24). public 메서드는 active를 호출하지 않는다. 타이머 task와 T1-19는 C가 구현한다.
 - `[확정]` 표본은 중복 없이 뽑는다(`random.sample`). 키가 20개 미만이면 전체를 검사한다.
-- `[확정]` 테스트 파일 분담: `test_ttl_storage.py`(B), `test_ttl_active.py`(C), `test_ttl_http.py`·`test_weather_cache.py`(A). 타이머 task 시험은 후속 `test_ttl_timer.py`(A).
+- `[확정]` 테스트 파일 분담: `test_ttl_storage.py`(B), `test_ttl_active.py`·`test_ttl_timer.py`(C), `test_ttl_http.py`·`test_weather_cache.py`(A).
 - `[확정]` `incr`·`decr`는 lazy 만료 검사를 하고, 만료된 키는 `NOT_FOUND`, 살아 있는 키의 TTL은 유지한다(T1-23).
 - `[확정]` `POST /kv/expire`·`POST /kv/persist`는 계약 필드 외 추가 필드를 무시한다. `PUT /kv`와 같고, `incr`/`decr`의 거절 규칙과 구분한다.
 - `[확정]` 원본 API 실패는 MiniRedis 계약 범위가 아니다. 소비자 책임이며 이 테스트 범위에 넣지 않는다.
 
 ## 9. 이 분업이 만족해야 하는 조건
 
-- 세 사람이 같은 `storage.py`를 수정하더라도 함수 단위 소유가 겹치지 않는다. B는 코어·public 메서드, C는 active 두 함수만 수정한다.
+- 세 사람이 같은 `storage.py`를 수정하더라도 함수 단위 소유가 겹치지 않는다. B는 코어·public 메서드, C는 active 두 함수와 `app.py` lifespan 블록만 수정한다.
 - `_drop_key`가 TTL 구조 제거의 유일한 경로다. B와 C가 각자 제거 로직을 만들지 않는다.
 - A는 HTTP 계약만, B는 저장소 계약만, C는 active 계약만 책임진다. 한 사람의 테스트를 다른 사람이 구현에 맞춰 바꾸지 않는다.
 - 테스트를 먼저 작성하고 구현 전 실패를 확인한다. 통과·실패·미검증을 구분해 기록한다.
