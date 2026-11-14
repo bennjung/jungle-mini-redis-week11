@@ -123,7 +123,7 @@ def test_a07_json_set_and_return_types(boundary, value):
     client, storage = boundary
     storage.set.return_value = {"ok": True}
     check(client.put("/kv", json={"key": "sample:json", "value": value}), 200, {"ok": True})
-    assert storage.mock_calls == [call.set("sample:json", value)]
+    assert storage.mock_calls == [call.set("sample:json", value, ttl=None)]
     assert type(storage.set.call_args.args[1]) is type(value)
     for method, operation in (("GET", "get"), ("DELETE", "delete")):
         storage.reset_mock()

@@ -180,7 +180,7 @@
 
 ## T1-20. HTTP TTL 표면
 
-`TestClient(create_app(MiniRedis(clock=...)))`로 각 행을 독립 실행한다. 사전 상태는 `PUT /kv`로 만든다.
+`TestClient(create_app(MiniRedis(clock=...)))`로 각 행을 독립 실행한다. 사전 상태는 `PUT /kv`로 만든다. key 누락 행만 Mock 저장소를 써서 저장소 호출 0회까지 확인한다.
 
 | 하위 ID | 사전 상태 | 요청 | 기대 |
 | --- | --- | --- | --- |
@@ -189,12 +189,15 @@
 | put-null-ttl | `PUT /kv` ttl 600000 | `PUT /kv` `{"key":"ttl:one","value":"hello","ttl":null}` | 200, `{"ok":true}`. `GET /kv/ttl`은 `ttl:-1` |
 | ttl-get | `PUT /kv` ttl 600000 | `GET /kv/ttl?key=ttl%3Aone` | 200, `{"found":true,"ttl":600000}` |
 | ttl-missing | 없음 | `GET /kv/ttl?key=missing` | 200, `{"found":false}` |
+| ttl-key-omitted | 없음 | `GET /kv/ttl` (쿼리 `key` 없음) | 400, `{"error":"INVALID_INPUT"}`. 저장소 호출 0 |
 | expire-set | `PUT /kv` TTL 없음 | `POST /kv/expire` `{"key":"ttl:one","ttl":60000}` | 200, `{"found":true,"ttl":60000}` |
 | expire-delete | `PUT /kv` ttl 600000 | `POST /kv/expire` `{"key":"ttl:one","ttl":0}` | 200, `{"found":true,"ttl":0}`. `GET /kv`는 `found:false` |
 | expire-missing | 없음 | `POST /kv/expire` `{"key":"missing","ttl":1000}` | 200, `{"found":false}` |
+| expire-key-omitted | 없음 | `POST /kv/expire` `{"ttl":1000}` | 400, `{"error":"INVALID_INPUT"}`. 저장소 호출 0 |
 | persist | `PUT /kv` ttl 600000 | `POST /kv/persist` `{"key":"ttl:one"}` | 200, `{"found":true,"persisted":true}`. `GET /kv/ttl`은 `ttl:-1` |
 | persist-no-ttl | `PUT /kv` TTL 없음 | `POST /kv/persist` `{"key":"ttl:one"}` | 200, `{"found":true,"persisted":false}` |
 | persist-missing | 없음 | `POST /kv/persist` `{"key":"missing"}` | 200, `{"found":false}` |
+| persist-key-omitted | 없음 | `POST /kv/persist` `{}` | 400, `{"error":"INVALID_INPUT"}`. 저장소 호출 0 |
 | get-hides-ttl | `PUT /kv` ttl 600000 | `GET /kv?key=ttl%3Aone` | `{"found":true,"value":"hello"}`. TTL 필드 없음 |
 | put-invalid-ttl | `PUT /kv` ttl 600000, value `"before"` | `PUT /kv` `{"key":"ttl:one","value":"after","ttl":0·-1·1.5·"1000"·true}` | 400, `{"error":"INVALID_INPUT"}`. `value`·TTL 보존 |
 | expire-invalid-ttl | `PUT /kv` ttl 600000, value `"before"` | `POST /kv/expire` `{"key":"ttl:one","ttl":누락·null·1.5·"1000"·true}` | 400, `{"error":"INVALID_INPUT"}`. `value`·TTL 보존 |

@@ -29,7 +29,7 @@ def exchange():
 
         if method == "PUT":
             response = client.put("/kv", json={"key": key, "value": value})
-            expected_call = call.set(key, value)
+            expected_call = call.set(key, value, ttl=None)
         else:
             # 쿼리 인코딩은 클라이언트에 맡기고 해석된 키의 전달을 검증한다.
             response = client.request(method, "/kv", params={"key": key})
@@ -232,7 +232,7 @@ def test_put_type_validation_delegated_to_storage(http_boundary, field, invalid_
 
     response = client.put("/kv", json=body)
 
-    assert storage.mock_calls == [call.set(body["key"], body["value"])]
+    assert storage.mock_calls == [call.set(body["key"], body["value"], ttl=None)]
     args = storage.set.call_args.args
     assert type(args[0]) is type(body["key"])
     assert type(args[1]) is type(body["value"])
@@ -261,7 +261,7 @@ def test_unexpected_storage_error_is_not_invalid_input(method, operation):
 
     assert caught.value is error
     expected_call = (
-        call.set("sample:one", "hello")
+        call.set("sample:one", "hello", ttl=None)
         if method == "PUT"
         else getattr(call, operation)("sample:one")
     )

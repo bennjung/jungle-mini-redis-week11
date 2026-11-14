@@ -61,7 +61,8 @@ def create_app(storage):
         ):
             return JSONResponse({"error": "INVALID_INPUT"}, status_code=400)
 
-        result = storage.set(body["key"], body["value"])
+        # ttl 생략과 JSON null은 모두 None이며 저장소가 기존 TTL을 제거한다.
+        result = storage.set(body["key"], body["value"], ttl=body.get("ttl"))
         status = 400 if result == {"error": "INVALID_INPUT"} else 200
         return JSONResponse(result, status_code=status)
 
@@ -82,6 +83,46 @@ def create_app(storage):
             return JSONResponse({"error": "INVALID_INPUT"}, status_code=400)
 
         result = storage.delete(key)
+        status = 400 if result == {"error": "INVALID_INPUT"} else 200
+        return JSONResponse(result, status_code=status)
+
+    @app.post("/kv/expire")
+    async def expire_kv(request: Request):
+        body = await _json_body(request)
+        # ttl 필드의 존재만 확인한다. null은 저장소에 그대로 전달해 판정을 맡긴다.
+        if (
+            body is _INVALID_BODY
+            or not isinstance(body, dict)
+            or "key" not in body
+            or "ttl" not in body
+        ):
+            return JSONResponse({"error": "INVALID_INPUT"}, status_code=400)
+
+        result = storage.expire(body["key"], body["ttl"])
+        status = 400 if result == {"error": "INVALID_INPUT"} else 200
+        return JSONResponse(result, status_code=status)
+
+    @app.get("/kv/ttl")
+    async def ttl_kv(request: Request):
+        key = request.query_params.get("key")
+        if key is None:
+            return JSONResponse({"error": "INVALID_INPUT"}, status_code=400)
+
+        result = storage.ttl(key)
+        status = 400 if result == {"error": "INVALID_INPUT"} else 200
+        return JSONResponse(result, status_code=status)
+
+    @app.post("/kv/persist")
+    async def persist_kv(request: Request):
+        body = await _json_body(request)
+        if (
+            body is _INVALID_BODY
+            or not isinstance(body, dict)
+            or "key" not in body
+        ):
+            return JSONResponse({"error": "INVALID_INPUT"}, status_code=400)
+
+        result = storage.persist(body["key"])
         status = 400 if result == {"error": "INVALID_INPUT"} else 200
         return JSONResponse(result, status_code=status)
 
