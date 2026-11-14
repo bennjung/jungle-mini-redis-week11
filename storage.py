@@ -2,6 +2,8 @@
 
 import json
 import math
+import random
+import time
 
 
 def _json_content_supported(value, path):
@@ -51,11 +53,52 @@ def _json_type(value):
 class MiniRedis:
     """각 인스턴스가 독립된 키·value 상태를 소유한다."""
 
-    def __init__(self):
+    def __init__(self, clock=None, sampler=None):
         self._data = {}
+        self._expires = {}
+        self._ttl_keys = []
+        self._ttl_pos = {}
+        self._clock = clock if clock is not None else lambda: int(time.time() * 1000)
+        self._sampler = sampler if sampler is not None else random.sample
 
-    def set(self, key, value):
-        """검증을 마친 뒤 지정한 키만 추가하거나 덮어쓴다."""
+    def _now_ms(self):
+        """현재 시각을 정수 epoch ms로 반환한다."""
+        return int(self._clock())
+
+    def _set_ttl(self, key, expiry_ms):
+        """절대 만료 시각을 기록한다. TTL이 없던 키면 인덱스에 추가한다."""
+        if key not in self._expires:
+            self._ttl_pos[key] = len(self._ttl_keys)
+            self._ttl_keys.append(key)
+        self._expires[key] = expiry_ms
+
+    def _clear_ttl(self, key):
+        """TTL 구조에서만 제거하고 value는 남긴다."""
+        if key not in self._expires:
+            return
+        index = self._ttl_pos.pop(key)
+        last = self._ttl_keys.pop()
+        if index < len(self._ttl_keys):
+            self._ttl_keys[index] = last
+            self._ttl_pos[last] = index
+        del self._expires[key]
+
+    def _drop_key(self, key):
+        """네 구조에서 키를 제거한다. TTL 구조 제거의 유일한 경로다."""
+        self._data.pop(key, None)
+        self._clear_ttl(key)
+
+    def _lazy_expire(self, key):
+        """그 키가 만료됐으면 제거하고, 만료 여부를 반환한다."""
+        if key not in self._expires:
+            return False
+        if self._now_ms() < self._expires[key]:
+            return False
+        self._drop_key(key)
+        return True
+
+    def set(self, key, value, ttl=None):
+        """검증을 마친 뒤 지정한 키를 덮어쓰고 선택한 TTL을 적용한다."""
         if not isinstance(key, str):
             return {"error": "INVALID_INPUT"}
         if not _json_content_supported(value, set()):
@@ -75,12 +118,21 @@ class MiniRedis:
             return {"error": "INVALID_INPUT"}
         if not 1 <= key_size <= 256 or value_size > 65_536:
             return {"error": "INVALID_INPUT"}
+        if ttl is not None:
+            # bool은 int의 하위 타입이므로 먼저 걸러낸다.
+            if isinstance(ttl, bool) or not isinstance(ttl, int) or ttl <= 0:
+                return {"error": "INVALID_INPUT"}
 
+        self._lazy_expire(key)
         self._data[key] = value
+        if ttl is None:
+            self._clear_ttl(key)
+        else:
+            self._set_ttl(key, self._now_ms() + ttl)
         return {"ok": True}
 
     def get(self, key):
-        """키의 존재 여부와 보관한 value를 상태 변경 없이 반환한다."""
+        """키의 존재 여부와 보관한 value를 반환한다. 만료된 키는 없는 키다."""
         if not isinstance(key, str):
             return {"error": "INVALID_INPUT"}
         try:
@@ -90,6 +142,7 @@ class MiniRedis:
         if not 1 <= key_size <= 256:
             return {"error": "INVALID_INPUT"}
 
+        self._lazy_expire(key)
         if key not in self._data:
             return {"found": False}
         return {"found": True, "value": self._data[key]}
@@ -105,10 +158,72 @@ class MiniRedis:
         if not 1 <= key_size <= 256:
             return {"error": "INVALID_INPUT"}
 
+        self._lazy_expire(key)
         if key not in self._data:
             return {"found": False}
-        value = self._data.pop(key)
+        value = self._data[key]
+        self._drop_key(key)
         return {"found": True, "value": value}
+
+    def expire(self, key, ttl):
+        """TTL을 설정·갱신한다. ttl이 0 이하면 키를 즉시 삭제한다."""
+        if not isinstance(key, str):
+            return {"error": "INVALID_INPUT"}
+        try:
+            key_size = len(key.encode("utf-8"))
+        except UnicodeEncodeError:
+            return {"error": "INVALID_INPUT"}
+        if not 1 <= key_size <= 256:
+            return {"error": "INVALID_INPUT"}
+
+        self._lazy_expire(key)
+        if key not in self._data:
+            return {"found": False}
+        if isinstance(ttl, bool) or not isinstance(ttl, int):
+            return {"error": "INVALID_INPUT"}
+
+        if ttl <= 0:
+            self._drop_key(key)
+            return {"found": True, "ttl": 0}
+        self._set_ttl(key, self._now_ms() + ttl)
+        return {"found": True, "ttl": ttl}
+
+    def ttl(self, key):
+        """남은 TTL을 ms로 반환한다. TTL이 없으면 -1이다."""
+        if not isinstance(key, str):
+            return {"error": "INVALID_INPUT"}
+        try:
+            key_size = len(key.encode("utf-8"))
+        except UnicodeEncodeError:
+            return {"error": "INVALID_INPUT"}
+        if not 1 <= key_size <= 256:
+            return {"error": "INVALID_INPUT"}
+
+        self._lazy_expire(key)
+        if key not in self._data:
+            return {"found": False}
+        if key not in self._expires:
+            return {"found": True, "ttl": -1}
+        return {"found": True, "ttl": self._expires[key] - self._now_ms()}
+
+    def persist(self, key):
+        """TTL만 제거하고 value는 유지한다."""
+        if not isinstance(key, str):
+            return {"error": "INVALID_INPUT"}
+        try:
+            key_size = len(key.encode("utf-8"))
+        except UnicodeEncodeError:
+            return {"error": "INVALID_INPUT"}
+        if not 1 <= key_size <= 256:
+            return {"error": "INVALID_INPUT"}
+
+        self._lazy_expire(key)
+        if key not in self._data:
+            return {"found": False}
+        if key not in self._expires:
+            return {"found": True, "persisted": False}
+        self._clear_ttl(key)
+        return {"found": True, "persisted": True}
 
     def incr(self, key, amount, *, maximum=_MISSING):
         """현재 수치에 증감량을 더한 뒤 상한을 확인하고 저장한다."""
@@ -144,6 +259,7 @@ class MiniRedis:
             if isinstance(bound, float) and not math.isfinite(bound):
                 return {"error": "OUT_OF_RANGE"}
 
+        self._lazy_expire(key)
         if key not in self._data:
             return {"error": "NOT_FOUND"}
         current = self._data[key]
