@@ -12,18 +12,38 @@
 
 ### TTL 계층
 
-- **저장소 수준 TTL(A)로 정한다.** `MiniRedis`가 만료 시각을 보관하고, `get`에서 만료를 판단한다. 애플리케이션 캐시는 이 기능을 사용하는 소비자다.
-- **TTL API는 D로 정한다.** `set(key, value, ttl=None)` + `expire(key, ttl)` + `ttl(key)` + `persist(key)`. HTTP는 `PUT /kv`의 선택 `ttl`, `POST /kv/expire`, `GET /kv/ttl`, `POST /kv/persist`.
-- **덮어쓸 때 TTL은 유지(B)로 정한다.** `set(key, value)`로 값을 덮어써도 기존 TTL이 남는다.
+- **TTL은 저장소(MiniRedis)가 관리한다.**
+  - `MiniRedis`가 키별 만료 시각을 보관한다. 애플리케이션은 TTL을 직접 계산하지 않는다.
+  - `get(key)`는 조회 시점에 `현재 시각 >= 만료 시각`인지 확인하고, 만료됐으면 "없음"으로 응답하면서 해당 키를 삭제한다.
+  - 이렇게 하면 API 응답 캐시뿐 아니라 세션, 레이트 리밋, 임시 데이터도 같은 TTL 기능을 쓸 수 있다.
+  - API 캐시 앱은 이 기능을 호출하는 소비자다. 캐시 앱이 원본 API를 호출하는 것이지, MiniRedis가 API를 호출하는 것이 아니다.
+  - 이유: TTL을 저장소 기능으로 두면 캐시·세션·레이트 리밋이 같은 만료 로직을 재사용하고, 앱마다 만료 계산을 중복하지 않는다.
+
+- **TTL API는 네 가지로 제공한다.**
+  - `set(key, value, ttl=None)` — 값을 저장하면서 TTL을 함께 걸 수 있다.
+  - `expire(key, ttl)` — 기존 키의 값은 그대로 두고 TTL만 설정하거나 바꾼다.
+  - `ttl(key)` — 남은 TTL을 조회한다.
+  - `persist(key)` — TTL을 제거해 만료되지 않게 한다.
+  - HTTP는 `PUT /kv`의 선택 `ttl`, `POST /kv/expire`, `GET /kv/ttl`, `POST /kv/persist`로 연결한다.
+
+- **같은 키에 값을 다시 저장해도 기존 TTL은 유지한다.**
+  - `set(key, value)`에 `ttl`을 주지 않으면 기존 만료 시각이 그대로 남는다.
   - 이유: 캐시에서 값을 다시 쓰면서 TTL을 빠뜨리면 영구 캐시가 된다. 세션 갱신에서도 만료가 유지되는 쪽이 안전하다.
   - TTL을 없애려면 `persist`, 새로 걸려면 `set(..., ttl=...)` 또는 `expire`를 쓴다.
-  - Redis 기본(초기화)과 다르므로 문서에 명시한다.
-- **만료 경계는 `now >= expire_at`(A)로 정한다.** 만료 시각에 도달하면 즉시 "없음"으로 처리하고, `get` 시 삭제한다. 가짜 시계로 정각을 검증한다.
+  - Redis 기본은 덮어쓸 때 TTL을 초기화하므로, 이 문서는 Redis와 다르다는 점을 명시한다.
+
+- **만료 시각에 도달하면 즉시 만료로 본다.**
+  - `현재 시각 >= 만료 시각`이면 "없음".
+  - `get`이 만료된 키를 만나면 그 자리에서 삭제한다.
+  - 테스트는 가짜 시계로 정각을 검증한다.
 - **`ttl=0`** — `set(..., ttl=0)`은 `INVALID_INPUT`으로 거절한다. `expire(key, 0)`은 키를 즉시 삭제한다.
 - **명시적 `null`** — `set`의 `"ttl": null`은 생략으로 보고 기존 TTL을 유지한다. `expire`의 TTL은 필수이므로 `null`은 거절한다.
 - **`expire` 성공 응답** — `{"found": true, "ttl": ttl}`. 키가 없으면 `{"found": false}`.
 - **`ttl` 표시 규칙** — TTL 단위가 정해진 뒤 내림/반올림을 정한다. 미정.
-- `ttl` 응답 형태는 제안이다: `{"found": true, "ttl": 남은 시간}`, TTL 없음 `{"found": true, "ttl": -1}`, 키 없음 `{"found": false}`. `persist`는 `{"found": true, "persisted": true/false}` 또는 `{"found": false}`. 단위와 정확한 형태는 다음에 정한다.
+- **`ttl`·`persist` 응답 형태(제안)**
+  - `ttl` — 키 있고 TTL 있음: `{"found": true, "ttl": 남은 시간}`, TTL 없음: `{"found": true, "ttl": -1}`, 키 없음: `{"found": false}`.
+  - `persist` — TTL 제거: `{"found": true, "persisted": true}`, TTL 없음: `{"found": true, "persisted": false}`, 키 없음: `{"found": false}`.
+  - 단위와 정확한 형태는 다음에 정한다.
 
 ### TTL 만료 정리 방식 후보
 
