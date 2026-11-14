@@ -88,11 +88,16 @@ class MiniRedis:
         self._data.pop(key, None)
         self._clear_ttl(key)
 
-    def _lazy_expire(self, key):
-        """그 키가 만료됐으면 제거하고, 만료 여부를 반환한다."""
+    def _lazy_expire(self, key, now_ms=None):
+        """그 키가 만료됐으면 제거하고, 만료 여부를 반환한다.
+
+        now_ms를 넘기면 그 시각으로 판정한다. 호출자가 남은 시간 계산에도
+        같은 시각을 쓰려고 넘길 수 있다.
+        """
         if key not in self._expires:
             return False
-        if self._now_ms() < self._expires[key]:
+        now = self._now_ms() if now_ms is None else now_ms
+        if now < self._expires[key]:
             return False
         self._drop_key(key)
         return True
@@ -151,12 +156,13 @@ class MiniRedis:
             if isinstance(ttl, bool) or not isinstance(ttl, int) or ttl <= 0:
                 return {"error": "INVALID_INPUT"}
 
-        self._lazy_expire(key)
+        now = self._now_ms()
+        self._lazy_expire(key, now)
         self._data[key] = value
         if ttl is None:
             self._clear_ttl(key)
         else:
-            self._set_ttl(key, self._now_ms() + ttl)
+            self._set_ttl(key, now + ttl)
         return {"ok": True}
 
     def get(self, key):
@@ -204,7 +210,8 @@ class MiniRedis:
         if not 1 <= key_size <= 256:
             return {"error": "INVALID_INPUT"}
 
-        self._lazy_expire(key)
+        now = self._now_ms()
+        self._lazy_expire(key, now)
         if key not in self._data:
             return {"found": False}
         if isinstance(ttl, bool) or not isinstance(ttl, int):
@@ -213,7 +220,7 @@ class MiniRedis:
         if ttl <= 0:
             self._drop_key(key)
             return {"found": True, "ttl": 0}
-        self._set_ttl(key, self._now_ms() + ttl)
+        self._set_ttl(key, now + ttl)
         return {"found": True, "ttl": ttl}
 
     def ttl(self, key):
@@ -227,12 +234,13 @@ class MiniRedis:
         if not 1 <= key_size <= 256:
             return {"error": "INVALID_INPUT"}
 
-        self._lazy_expire(key)
+        now = self._now_ms()
+        self._lazy_expire(key, now)
         if key not in self._data:
             return {"found": False}
         if key not in self._expires:
             return {"found": True, "ttl": -1}
-        return {"found": True, "ttl": self._expires[key] - self._now_ms()}
+        return {"found": True, "ttl": self._expires[key] - now}
 
     def persist(self, key):
         """TTL만 제거하고 value는 유지한다."""

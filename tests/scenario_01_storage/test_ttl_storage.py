@@ -1,4 +1,4 @@
-"""resc/scenario_01_storage/01-ttl-test-cases.md의 T1-01~13, T1-23 저장소 계약.
+"""resc/scenario_01_storage/01-ttl-test-cases.md의 T1-01~13, T1-23~24 저장소 계약.
 
 가짜 벽시계와 주입한 표본 선택기로 TTL 경계를 정확히 검증한다.
 실행: .venv/bin/python -m pytest tests/scenario_01_storage/test_ttl_storage.py -q
@@ -385,3 +385,24 @@ def test_t1_23_incr_decr_lazy_expiry_and_ttl(store, clock):
         store.incr("count:plain", 1), {"ok": True, "value": 11},
     )
     assert_ttl_state(store, {}, [], {})
+
+
+class StepClock:
+    """호출될 때마다 1ms씩 진행하는 시계. 시각을 몇 번 읽는지 드러낸다."""
+
+    def __init__(self, now=BASE_MS):
+        self._now = now
+
+    def __call__(self):
+        self._now += 1
+        return self._now
+
+
+def test_t1_24_ttl_uses_one_clock_read():
+    """T1-24: ttl은 만료 판정과 남은 시간 계산에 같은 시각을 쓴다."""
+    clock = StepClock()
+    store = MiniRedis(clock=clock)
+
+    assert_mapping(store.set("ttl:one", "hello", ttl=2), {"ok": True})
+    assert_mapping(store.ttl("ttl:one"), {"found": True, "ttl": 1})
+    assert_mapping(store.get("ttl:one"), {"found": False})

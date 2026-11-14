@@ -1,9 +1,9 @@
-# 01 TTL 테스트 계약 (초안)
+# 01 TTL 테스트 계약
 
 ## 기준과 상태
 
 - 기준: [01 TTL 계약](01-ttl-contract.md), [04 날씨 TTL/LDC 결정 로그](../scenario_04_response_cache/04-weather-ttl-decision-log.md), [REST API 9절](../../rest-api.md).
-- 이 문서는 확정된 TTL 행동을 정확한 입력·관찰로 구체화한 테스트 계약이다. 아래 표본은 계약을 검증하기 위한 입력이며 새 기능·정책을 추가하지 않는다. 2026-11-14에 T1-01~18, T1-20~21, T1-23의 입력·기대를 동결했다. T1-19는 C가 타이머와 함께 동결한다.
+- 이 문서는 확정된 TTL 행동을 정확한 입력·관찰로 구체화한 테스트 계약이다. 아래 표본은 계약을 검증하기 위한 입력이며 새 기능·정책을 추가하지 않는다. 2026-11-14에 T1-01~18, T1-20~21, T1-23~24의 입력·기대를 동결했다. T1-19는 C가 타이머와 함께 동결한다.
 - 저장소 코어 테스트: `tests/scenario_01_storage/test_ttl_storage.py`. Active 만료 테스트: `tests/scenario_01_storage/test_ttl_active.py`. HTTP 표면 테스트: `tests/scenario_01_storage/test_ttl_http.py`. 타이머 task 테스트: `tests/scenario_01_storage/test_ttl_timer.py`(C). 날씨 소비자 기능 테스트: `tests/scenario_04_response_cache/test_weather_cache.py`.
 - 테스트 helper: `tests/scenario_01_storage/ttl_state_helpers.py`, `tests/scenario_01_storage/ttl_clock_helpers.py`.
 - 구현 전에 테스트를 실행해 실패 원인을 확인하고, 구현 뒤 같은 테스트를 다시 실행한다. 테스트에 맞추어 TTL 계약을 완화하지 않는다.
@@ -230,6 +230,16 @@
   - `advance(60_000)` → `incr("count:ttl", 1)` = `{"error": "NOT_FOUND"}`. `get("count:ttl")` = `{"found": False}`.
   - `incr("count:plain", 1)` = `{"ok": True, "value": 11}`. TTL 구조에 키가 없다.
 - 유지: 만료된 키는 증감으로 되살아나지 않는다. TTL 없는 키의 동작은 바뀌지 않는다. 입력 거절 시에는 lazy 정리도 하지 않는다.
+
+## T1-24. ttl의 단일 시각 판정
+
+- 사전 상태: `set("ttl:one", "hello", ttl=2)`. 시계는 호출마다 1ms 진행한다.
+- 입력·기대:
+  - `ttl("ttl:one")` = `{"found": True, "ttl": 1}`.
+  - 이어 `get("ttl:one")` = `{"found": False}`.
+- 검증 시점: 각 호출 직후.
+- 기대: 만료 판정과 남은 시간 계산이 같은 시각을 쓴다. 유효한 키에 `ttl: 0`을 반환하지 않는다.
+- 유지: 시계를 두 번 읽어 만료 경계를 넘는 경우를 만들지 않는다.
 
 ## T1-22. 확정 요약 (테스트 대상 아님)
 

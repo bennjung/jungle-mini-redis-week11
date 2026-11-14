@@ -75,7 +75,7 @@ lifespan 타이머 task — app.py (C)
 | `_drop_key(key)` | B | `_data`·`_expires`·`_ttl_keys`·`_ttl_pos`에서 키를 제거한다. TTL 구조 제거의 유일한 경로다 | 없음 |
 | `_set_ttl(key, expiry_ms)` | B | `_expires`에 절대 만료 시각을 기록한다. TTL이 없던 키면 `_ttl_keys`에 추가한다 | 없음 |
 | `_clear_ttl(key)` | B | TTL 구조에서만 제거하고 `value`는 남긴다 | 없음 |
-| `_lazy_expire(key)` | B | 그 키가 만료됐는지 확인하고, 만료면 `_drop_key`를 호출한다 | 만료 여부 |
+| `_lazy_expire(key, now_ms=None)` | B | 주어진 시각(없으면 현재)으로 만료를 확인하고, 만료면 `_drop_key`를 호출한다 | 만료 여부 |
 | `_maybe_active_expire()` | C | 타이머가 100ms마다 호출하는 tick 진입점. active 사이클을 최대 2회 실행한다 | 없음 |
 | `_active_expire_cycle(now_ms)` | C | TTL 키에서 최대 20개를 뽑아 만료된 키를 제거한다 | `(expired_count, sample_size)` |
 
@@ -103,7 +103,7 @@ lifespan 타이머 task — app.py (C)
 | 역할 | 수정 파일 | 담당 함수 | 테스트 | 선행 조건 |
 | --- | --- | --- | --- | --- |
 | [**A. HTTP 경계·소비자**](01-ttl-a-http-contract.md) | `app.py`(HTTP handler), `tests/scenario_01_storage/test_ttl_http.py`, `tests/scenario_04_response_cache/test_weather_cache.py` | `put_kv`, `expire_kv`, `ttl_kv`, `persist_kv` | T1-20, T1-21 | B의 저장소 인터페이스, C의 `FakeClock` |
-| [**B. TTL 코어**](01-ttl-b-core-contract.md) | `storage.py`의 TTL 코어·public 메서드, `tests/scenario_01_storage/test_ttl_storage.py`, `tests/scenario_01_storage/ttl_state_helpers.py` | `__init__`, `_now_ms`, `_drop_key`, `_set_ttl`, `_clear_ttl`, `_lazy_expire`, `set`, `get`, `delete`, `expire`, `ttl`, `persist`, `incr`, `decr`, `_adjust` | T1-01~13, T1-23 | 없음 |
+| [**B. TTL 코어**](01-ttl-b-core-contract.md) | `storage.py`의 TTL 코어·public 메서드, `tests/scenario_01_storage/test_ttl_storage.py`, `tests/scenario_01_storage/ttl_state_helpers.py` | `__init__`, `_now_ms`, `_drop_key`, `_set_ttl`, `_clear_ttl`, `_lazy_expire`, `set`, `get`, `delete`, `expire`, `ttl`, `persist`, `incr`, `decr`, `_adjust` | T1-01~13, T1-23~24 | 없음 |
 | [**C. Active 만료·타이머**](01-ttl-c-active-contract.md) | `storage.py`의 active 구간, `app.py`의 lifespan 타이머 블록, `tests/scenario_01_storage/test_ttl_active.py`, `tests/scenario_01_storage/ttl_clock_helpers.py`, `tests/scenario_01_storage/test_ttl_timer.py` | `_maybe_active_expire`, `_active_expire_cycle`, `_timer_loop` | T1-14~19 | B의 `_now_ms`·`_drop_key`·TTL 구조 |
 | **통합** | `storage.py` 병합, 전체 테스트 실행 | 함수 단위 병합·회귀 확인 | T1-01~18, T1-20~21 | A·B·C |
 
@@ -157,7 +157,7 @@ class MiniRedis:
 | `_drop_key(key)` | B | 키 | `_data`·`_expires`·`_ttl_keys`·`_ttl_pos`에서 제거 | B, C |
 | `_set_ttl(key, expiry_ms)` | B | 키, 절대 만료 ms | TTL 추가·갱신. 없으면 목록 끝에 추가 | B |
 | `_clear_ttl(key)` | B | 키 | TTL만 제거하고 `value`는 유지 | B |
-| `_lazy_expire(key)` | B | 키 | 만료 확인·필요 시 `_drop_key`; 만료 여부 반환 | B의 public 메서드 |
+| `_lazy_expire(key, now_ms=None)` | B | 키, 선택 시각 | 주어진 시각(없으면 현재)으로 만료 확인·필요 시 `_drop_key`; 만료 여부 반환 | B의 public 메서드 |
 | `_maybe_active_expire()` | C | 없음 | 타이머 tick. 사이클 최대 2회 | lifespan 타이머 task(후속) |
 | `_active_expire_cycle(now_ms)` | C | 현재 ms | 표본·만료 확인·`_drop_key`; `(expired_count, sample_size)` 반환 | C |
 

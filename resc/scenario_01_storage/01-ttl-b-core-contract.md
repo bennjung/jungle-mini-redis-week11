@@ -12,7 +12,7 @@
 | --- | --- |
 | 수정 파일 | `storage.py`의 TTL 코어·public 메서드, `tests/scenario_01_storage/test_ttl_storage.py`, `tests/scenario_01_storage/ttl_state_helpers.py` |
 | 담당 함수 | `__init__`, `_now_ms`, `_drop_key`, `_set_ttl`, `_clear_ttl`, `_lazy_expire`, `set`, `get`, `delete`, `expire`, `ttl`, `persist`, `incr`, `decr`, `_adjust` |
-| 테스트 | T1-01~13, T1-23 |
+| 테스트 | T1-01~13, T1-23~24 |
 
 ## 자료구조와 불변 조건
 
@@ -43,7 +43,7 @@
 | `_drop_key(key)` | 네 구조에서 키를 제거한다. TTL 구조 제거의 **유일한 경로**다. `_ttl_keys`는 swap-pop으로 O(1)에 지운다 |
 | `_set_ttl(key, expiry_ms)` | `_expires`에 절대 만료 시각을 쓴다. TTL이 없던 키면 `_ttl_keys` 끝에 추가하고 `_ttl_pos`를 기록한다 |
 | `_clear_ttl(key)` | TTL 구조에서만 제거하고 `value`는 남긴다 |
-| `_lazy_expire(key)` | 그 키가 만료됐는지 확인하고, 만료면 `_drop_key`를 호출한다. 만료 여부를 반환한다 |
+| `_lazy_expire(key, now_ms=None)` | 주어진 시각(없으면 현재)으로 그 키가 만료됐는지 확인하고, 만료면 `_drop_key`를 호출한다. 만료 여부를 반환한다 |
 
 - 입력 검증이 실패하면 상태를 바꾸지 않고 lazy 정리도 하지 않는다.
 
@@ -75,7 +75,8 @@
 ### `ttl(key)`
 
 - 키 검증 → lazy 만료 → 키 없음·만료면 `{"found": False}`.
-- TTL이 있으면 `{"found": True, "ttl": _expires[key] - now_ms}`.
+- `now`를 한 번 읽어 만료 판정과 남은 시간 계산에 함께 쓴다.
+- TTL이 있으면 `{"found": True, "ttl": _expires[key] - now}`.
 - TTL이 없으면 `{"found": True, "ttl": -1}`.
 
 ### `persist(key)`
@@ -93,7 +94,7 @@
 
 ## 테스트
 
-- 동결된 입력과 기대값은 [TTL 테스트 계약](01-ttl-test-cases.md)의 T1-01~13, T1-23을 따른다.
+- 동결된 입력과 기대값은 [TTL 테스트 계약](01-ttl-test-cases.md)의 T1-01~13, T1-23~24를 따른다.
 - 각 연산 뒤 `ttl_snapshot(store)`와 `assert_ttl_invariants(store)`로 구조를 확인한다.
 - 기존 `test_storage.py`·`test_storage_invalid_input.py`와 02 저장소 테스트가 계속 통과해야 한다.
 
@@ -107,4 +108,4 @@
 ## 선행과 완료
 
 - 선행: 없음. B의 구조와 시그니처가 C·A의 선행 조건이다.
-- 완료: T1-01~13, T1-23 통과. 기존 저장소·02 회귀 통과. 불변 조건 유지.
+- 완료: T1-01~13, T1-23~24 통과. 기존 저장소·02 회귀 통과. 불변 조건 유지.
