@@ -516,6 +516,7 @@ weather:35.179:129.075
 | D-22 | 2026-11-14 | TTL API 표면을 네 가지 전체로 확정: `set(ttl)`, `expire`, `ttl`, `persist`. HTTP는 `PUT /kv`의 선택 `ttl`, `POST /kv/expire`, `GET /kv/ttl`, `POST /kv/persist`. | L2 논의, 프로젝트 사용자 선택 | L2, `rest-api.md`, `01-ttl-contract.md`, 테스트 | `[확정]` |
 | D-23 | 2026-11-14 | active 표본은 중복 없이 뽑는다(`random.sample`). 키가 20개 미만이면 전체를 검사한다. | L10 논의, 프로젝트 사용자 선택 | L10, `01-ttl-contract.md`, `01-ttl-test-cases.md`, 테스트 | `[확정]` |
 | D-24 | 2026-11-14 | Active 만료를 시간 기준 백그라운드 타이머로 변경한다. FastAPI `lifespan`이 100ms 주기 task를 소유하고, 요청 수와 무관하게 tick을 실행한다. D-05·D-09의 요청 트리거 표현과 D-20을 대체한다. | FastAPI 전환의 목적이 lifespan에서 주기 정리를 소유하는 것이었고, Redis의 serverCron·activeExpireCycle 방식을 따른다 | L9, L11, `01-ttl-contract.md`, `app.py`, `storage.py`, 테스트 | `[확정]` |
+| D-25 | 2026-11-14 | `incr`·`decr`는 lazy 만료 검사를 하고, 만료된 키는 `NOT_FOUND`, 살아 있는 키의 TTL은 유지한다. | Redis의 INCR/DECR 방향과 02의 없는 키 `NOT_FOUND` 계약 유지 | `01-ttl-contract.md`, `01-ttl-test-cases.md`, `storage.py`, 테스트 | `[확정]` |
 
 - 이 표에는 합의된 결정만 추가한다. `[제안]`·`[미정]` 항목은 결정이 난 뒤 날짜와 근거를 붙여 추가한다.
 - 결정이 바뀌면 기존 행을 지우지 않고 새 행에 변경 이유를 적는다.

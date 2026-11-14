@@ -4,7 +4,7 @@
 
 - 기준: [01 TTL 계약](01-ttl-contract.md), [01 TTL 테스트 계약](01-ttl-test-cases.md), [REST API 9절](../../rest-api.md), [04 날씨 TTL/LDC 결정 로그](../scenario_04_response_cache/04-weather-ttl-decision-log.md).
 - 이 문서는 TTL 기능을 기존 `app.py` → `storage.py` 흐름에 배치하고, 테스트 작성부터 구현까지 3인 분업 경계를 정하는 설계 초안이다.
-- `[확정]` 2026-11-14 구현 범위: 01 TTL 전체(저장소 코어·active tick·HTTP 표면)와 04 날씨 소비자 테스트(T1-21)까지를 한 조각으로 구현한다. 타이머 task와 T1-19는 후속 timer 브랜치에서 한다. 03 성능 재측정·대량 무효화·`incr`/`decr`의 TTL 관계·원본 실패 응답은 제외한다.
+- `[확정]` 2026-11-14 구현 범위: 01 TTL 전체(저장소 코어·active tick·HTTP 표면·`incr`/`decr` lazy)와 04 날씨 소비자 테스트(T1-21)까지를 한 조각으로 구현한다. 타이머 task와 T1-19는 후속 timer 브랜치에서 한다. 03 성능 재측정·대량 무효화·원본 실패 응답은 제외한다.
 - 함수 이름·인자·내부 helper 이름은 `[제안]`이다. 테스트 코드 작성 전에 이 계약을 동결한다.
 - `[미정]` 항목은 구현으로 확정하지 않는다. 담당 범위의 테스트를 작성하기 전에 사용자 확인을 받는다.
 - 새 계층·큐·잠금·별도 저장소를 만들지 않는다. 기존 `create_app(storage)`와 단일 `MiniRedis` 인스턴스, 단일 이벤트 루프·`uvicorn workers=1` 서버를 유지한다.
@@ -64,7 +64,7 @@ lifespan 타이머 task — app.py (후속 timer 브랜치)
 | `expire(key, ttl)` | B | TTL을 설정·갱신한다. `ttl<=0`이면 키를 즉시 삭제한다 | `{"found": True, "ttl": ...}` 또는 `{"found": False}` |
 | `ttl(key)` | B | 남은 TTL을 ms로 돌려준다. TTL이 없으면 `-1`이다 | `{"found": True, "ttl": ...}` 또는 `{"found": False}` |
 | `persist(key)` | B | TTL만 제거하고 `value`는 유지한다 | `{"found": True, "persisted": ...}` 또는 `{"found": False}` |
-| `incr`·`decr`·`_adjust` | 기존 | 카운터 증감. 이번 범위에서는 수정하지 않는다 | 기존 계약 |
+| `incr`·`decr`·`_adjust` | B | 카운터 증감. lazy 만료 검사를 추가하고, 살아 있는 키의 TTL은 유지한다 | 기존 계약 + `{"error": "NOT_FOUND"}` |
 
 **내부 helper**
 
@@ -102,7 +102,7 @@ lifespan 타이머 task — app.py (후속 timer 브랜치)
 | 역할 | 수정 파일 | 담당 함수 | 테스트 | 선행 조건 |
 | --- | --- | --- | --- | --- |
 | **A. HTTP 경계·소비자** | `app.py`, `tests/scenario_01_storage/test_ttl_http.py`, `tests/scenario_04_response_cache/test_weather_cache.py` | `put_kv`, `expire_kv`, `ttl_kv`, `persist_kv` | T1-20, T1-21 | B의 저장소 인터페이스, C의 `FakeClock` |
-| **B. TTL 코어** | `storage.py`의 TTL 코어·public 메서드, `tests/scenario_01_storage/test_ttl_storage.py`, `tests/scenario_01_storage/ttl_state_helpers.py` | `__init__`, `_now_ms`, `_drop_key`, `_set_ttl`, `_clear_ttl`, `_lazy_expire`, `set`, `get`, `delete`, `expire`, `ttl`, `persist` | T1-01~13 | 없음 |
+| **B. TTL 코어** | `storage.py`의 TTL 코어·public 메서드, `tests/scenario_01_storage/test_ttl_storage.py`, `tests/scenario_01_storage/ttl_state_helpers.py` | `__init__`, `_now_ms`, `_drop_key`, `_set_ttl`, `_clear_ttl`, `_lazy_expire`, `set`, `get`, `delete`, `expire`, `ttl`, `persist`, `incr`, `decr`, `_adjust` | T1-01~13, T1-23 | 없음 |
 | **C. Active 만료** | `storage.py`의 active 구간, `tests/scenario_01_storage/test_ttl_active.py`, `tests/scenario_01_storage/ttl_clock_helpers.py` | `_maybe_active_expire`, `_active_expire_cycle` | T1-14~18 | B의 `_now_ms`·`_drop_key`·TTL 구조 |
 | **통합** | `storage.py` 병합, 전체 테스트 실행 | 함수 단위 병합·회귀 확인 | T1-01~18, T1-20~21 | A·B·C |
 
@@ -252,7 +252,7 @@ class MiniRedis:
 - `expire`: 키 검증 → lazy 만료 → 키 없음/만료 `{"found": False}` → TTL 검증 → 양수면 `_set_ttl`, 0·음수면 `_drop_key` 후 `{"found": True, "ttl": 0}`.
 - `ttl`: 키 검증 → lazy 만료 → TTL 있으면 남은 ms, 없으면 `-1`, 없거나 만료면 `{"found": False}`.
 - `persist`: 키 검증 → lazy 만료 → TTL 있으면 `_clear_ttl` 후 `persisted: True`, 없으면 `persisted: False`, 키 없음/만료면 `{"found": False}`.
-- `incr`·`decr`는 TTL 관계가 `[미정]`이므로 이번 범위에서 수정하지 않는다.
+- `incr`·`decr`: 키·증감량·조건 검증 → lazy 만료 → 기존 증감. 만료된 키는 `NOT_FOUND`, 살아 있는 키의 TTL은 유지한다. `_adjust`에 lazy 검사 한 줄을 추가한다.
 - B는 `_maybe_active_expire`의 본문을 작성하지 않는다. public 메서드에서 호출하지도 않는다.
 
 ### 4.3 `storage.py` active — C
@@ -292,8 +292,8 @@ def _active_expire_cycle(self, now_ms):
 ### B. TTL 코어
 
 - **수정 가능:** `storage.py`의 TTL 코어·public 메서드, `test_ttl_storage.py`, `ttl_state_helpers.py`.
-- **필수:** 자료구조·불변 조건·`_now_ms`·`_drop_key`·`_set_ttl`·`_clear_ttl`·`_lazy_expire`·public 계약. 입력 검증 전 상태 변경 금지. `set`의 TTL 초기화(D-04), `expire`의 0·음수 삭제, `ttl`의 `-1`, `persist`의 `persisted` 반환.
-- **금지:** `app.py` 수정, `_maybe_active_expire`·`_active_expire_cycle` 본문 작성, `incr`·`decr` TTL 동작 임의 확정, `_drop_key` 밖에서 TTL 구조 직접 변경.
+- **필수:** 자료구조·불변 조건·`_now_ms`·`_drop_key`·`_set_ttl`·`_clear_ttl`·`_lazy_expire`·public 계약. 입력 검증 전 상태 변경 금지. `set`의 TTL 초기화(D-04), `expire`의 0·음수 삭제, `ttl`의 `-1`, `persist`의 `persisted` 반환. `incr`·`decr`의 lazy 만료와 TTL 유지.
+- **금지:** `app.py` 수정, `_maybe_active_expire`·`_active_expire_cycle` 본문 작성, `_drop_key` 밖에서 TTL 구조 직접 변경.
 - **독립 검증:** T1-01~13. 각 연산 뒤 `ttl_snapshot`과 불변 조건을 확인한다. 기존 `tests/scenario_01_storage/test_storage.py`·`test_storage_invalid_input.py`가 계속 통과해야 한다.
 
 ### C. Active 만료
@@ -332,6 +332,7 @@ def _active_expire_cycle(self, now_ms):
 | `test_weather_cache.py` 소비자 경로 | T1-21 | A |
 | `MiniRedis.set/get/delete/expire/ttl/persist` 코어 | T1-01~13 | B |
 | `_set_ttl`·`_clear_ttl`·`_drop_key`·불변 조건 | T1-01~13 | B |
+| `incr`·`decr`의 lazy 만료·TTL 유지 | T1-23 | B |
 | `_maybe_active_expire`·`_active_expire_cycle` | T1-14~18 | C |
 | `FakeClock`·`FirstKSampler` | T1-14~18, T1-21 | C |
 | `ttl_snapshot`·`assert_ttl_invariants` | T1-01~13 | B |
@@ -343,7 +344,7 @@ def _active_expire_cycle(self, now_ms):
 - `[확정]` active 만료는 lifespan의 100ms 주기 타이머가 실행한다(D-24). public 메서드는 active를 호출하지 않는다. 타이머 task 구현과 T1-19는 후속 timer 브랜치에서 하고, 이번 조각은 tick 함수까지다.
 - `[확정]` 표본은 중복 없이 뽑는다(`random.sample`). 키가 20개 미만이면 전체를 검사한다.
 - `[제안]` 테스트 파일 분담: `test_ttl_storage.py`(B), `test_ttl_active.py`(C), `test_ttl_http.py`·`test_weather_cache.py`(A). 타이머 task 시험은 후속 `test_ttl_timer.py`(A).
-- `[미정]` `incr`·`decr`의 TTL 유지·lazy 검사.
+- `[확정]` `incr`·`decr`는 lazy 만료 검사를 하고, 만료된 키는 `NOT_FOUND`, 살아 있는 키의 TTL은 유지한다(T1-23).
 - `[미정]` `POST /kv/expire`·`POST /kv/persist`의 알 수 없는 추가 필드 정책.
 - `[미정]` 원본 실패·MiniRedis 실패 시 날씨 소비자 응답.
 

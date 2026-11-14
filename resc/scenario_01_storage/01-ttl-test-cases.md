@@ -218,11 +218,21 @@
 - 유지: 응답 내용이 같아도 원본 호출 수로 재사용·재조회를 구분한다.
 - 미정: 원본 실패 시 동작, 정확한 TTL 값, 원본 응답 스키마. 실패 주입 테스트는 결정 후 추가한다.
 
+## T1-23. incr·decr의 lazy 만료와 TTL 유지
+
+- 사전 상태: `set("count:ttl", 10, ttl=60_000)`, `set("count:plain", 10)`.
+- 입력·기대:
+  - `incr("count:ttl", 5)` → `{"ok": True, "value": 15}`. `ttl("count:ttl")` = `{"found": True, "ttl": 60_000}`.
+  - `decr("count:ttl", 3)` → `{"ok": True, "value": 12}`. TTL은 그대로 60_000이다.
+  - `advance(60_000)` → `incr("count:ttl", 1)` = `{"error": "NOT_FOUND"}`. `get("count:ttl")` = `{"found": False}`.
+  - `incr("count:plain", 1)` = `{"ok": True, "value": 11}`. TTL 구조에 키가 없다.
+- 유지: 만료된 키는 증감으로 되살아나지 않는다. TTL 없는 키의 동작은 바뀌지 않는다. 입력 거절 시에는 lazy 정리도 하지 않는다.
+
 ## T1-22. 미정 항목 (테스트 작성 보류)
 
 - `[확정]` active 표본은 중복 없이 뽑는다(`random.sample`). `T1-14`~`T1-18`의 고정 표본 선택기는 이 조건과 맞는다.
 - `[확정]` active 만료는 lifespan의 100ms 주기 타이머가 실행한다(D-24). `T1-14`~`T1-18`은 tick 함수를 직접 호출한다. `T1-19`는 후속 timer 브랜치에서 작성한다.
-- `[미정]` `incr`·`decr`의 lazy 만료 검사와 TTL 유지 여부. 결정 전에는 테스트를 작성하지 않는다.
+- `[확정]` `incr`·`decr`는 lazy 만료 검사를 하고, 만료된 키는 `NOT_FOUND`, 살아 있는 키의 TTL은 유지한다(T1-23).
 - `[미정]` `POST /kv/expire`·`POST /kv/persist`의 알 수 없는 추가 필드 정책. 결정 전에는 해당 입력을 테스트하지 않는다.
 - `[미정]` 원본 실패·MiniRedis 실패 시 사용자 응답. 04 문서의 미정 항목과 함께 결정한다.
 
