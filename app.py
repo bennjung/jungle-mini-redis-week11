@@ -1,10 +1,14 @@
 """문서 01의 HTTP 요청과 증감 요청을 전달받은 저장소 호출에 연결한다."""
 
+import asyncio
 import json
-from contextlib import asynccontextmanager
+import logging
+from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+
+logger = logging.getLogger(__name__)
 
 # 저장소가 반환한 오류 코드를 승인된 HTTP 상태로 연결한다.
 ERROR_STATUS = {
@@ -30,18 +34,34 @@ async def _json_body(request):
         return _INVALID_BODY
 
 
+async def _timer_loop(storage, interval=0.1, sleep=asyncio.sleep):
+    """lifespan이 소유하는 100ms 주기 tick. sleep을 주입해 테스트에서 주기를 제어한다."""
+    while True:
+        await sleep(interval)
+        try:
+            storage._maybe_active_expire()
+        except Exception:
+            logger.exception("TTL active cleanup failed; timer stopped")
+            return
+
+
 def create_app(storage):
     """모든 API가 같은 저장소를 사용하는 FastAPI 앱을 생성한다."""
 
     @asynccontextmanager
     async def lifespan(app):
-        """TTL active cleanup maintenance task를 소유할 자리다.
+        """앱 수명 동안 TTL active cleanup task를 소유한다.
 
-        아직 TTL과 정리 루프를 구현하지 않았으므로 시작하는 task가 없다.
-        후속 TTL 단계에서 이 블록에서 주기 task를 만들고, yield 이후 취소·대기한다.
+        시작 시 100ms 주기 task를 만들고, 종료 시 취소한 뒤 대기한다.
         lifespan은 요청 처리 경로가 아니므로 저장소 호출이나 HTTP 응답에 관여하지 않는다.
         """
-        yield
+        task = asyncio.create_task(_timer_loop(storage))
+        try:
+            yield
+        finally:
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
 
     app = FastAPI(lifespan=lifespan)
 

@@ -97,6 +97,34 @@ class MiniRedis:
         self._drop_key(key)
         return True
 
+    def _maybe_active_expire(self):
+        """타이머 tick. 같은 시점으로 active 사이클을 최대 2회 실행한다."""
+        now = self._now_ms()
+        expired, size = self._active_expire_cycle(now)
+        if size > 0 and expired * 4 >= size:
+            self._active_expire_cycle(now)
+
+    def _active_expire_cycle(self, now_ms):
+        """TTL 키에서 최대 20개를 뽑아 만료된 키를 제거한다."""
+        keys = self._ttl_keys
+        k = min(20, len(keys))
+        if k == 0:
+            return 0, 0
+        if self._sampler is not None:
+            sample = self._sampler(keys, k)
+        else:
+            sample = random.sample(keys, k)
+
+        expired = 0
+        for key in sample:
+            expiry_ms = self._expires.get(key)
+            # 표본을 뽑은 뒤 TTL이 갱신됐거나 키가 사라졌으면 삭제하지 않는다.
+            if expiry_ms is None or now_ms < expiry_ms:
+                continue
+            self._drop_key(key)
+            expired += 1
+        return expired, len(sample)
+
     def set(self, key, value, ttl=None):
         """검증을 마친 뒤 지정한 키를 덮어쓰고 선택한 TTL을 적용한다."""
         if not isinstance(key, str):
