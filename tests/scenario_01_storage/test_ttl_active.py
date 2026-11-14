@@ -1,4 +1,4 @@
-"""T1-14~18: TTL active 만료 tick. tick 함수를 직접 호출하고 실제 시간을 기다리지 않는다.
+"""T1-14~18, T1-25: TTL active 만료 tick. tick 함수를 직접 호출하고 실제 시간을 기다리지 않는다.
 
 대상: MiniRedis._maybe_active_expire / MiniRedis._active_expire_cycle
 계약: resc/scenario_01_storage/01-ttl-test-cases.md, 01-ttl-c-active-contract.md
@@ -71,6 +71,10 @@ def test_t1_15_under_25_percent_stops_after_one_cycle():
     # 4/20 = 20% < 25%이므로 표본 선택기는 1회만 호출된다.
     assert len(sampler.calls) == 1
     assert len(sampler.calls[0]) == 20
+    # get()의 lazy 만료와 구분해, cycle이 TTL 구조에서 실제로 제거했는지 본다.
+    expires, ttl_keys, _ = ttl_snapshot(store)
+    assert set(expires) == set(alive)
+    assert set(ttl_keys) == set(alive)
     assert_removed(store, expired)
     assert_alive(store, alive)
     assert_ttl_invariants(store)
@@ -117,8 +121,9 @@ class HookSampler:
     def __call__(self, keys, k):
         sample = list(keys[:k])
         self.calls.append(sample)
-        if self.before_return is not None:
-            self.before_return()
+        hook, self.before_return = self.before_return, None
+        if hook is not None:
+            hook()
         return sample
 
 
@@ -146,6 +151,20 @@ def test_t1_18_live_and_refreshed_ttl_preserved():
 
     store._maybe_active_expire()
 
+    assert len(sampler.calls) == 2
     assert_alive(store, keys)
     assert store.ttl(keys[0]) == {"found": True, "ttl": 60_000}
+    assert_ttl_invariants(store)
+
+
+def test_t1_25_empty_ttl_set_tick_does_not_sample():
+    """T1-25: TTL 키가 없으면 sampler를 부르지 않고 (0, 0)으로 끝난다."""
+    sampler = FirstKSampler()
+    store, _ = build_store(sampler)
+    assert store.set("plain:keep", "hello") == {"ok": True}
+
+    store._maybe_active_expire()
+
+    assert sampler.calls == []
+    assert_alive(store, ["plain:keep"])
     assert_ttl_invariants(store)

@@ -263,3 +263,14 @@ def test_persist_key_omitted():
 
     check(client.post("/kv/persist", json={}), 400, {"error": "INVALID_INPUT"})
     assert storage.mock_calls == []
+
+
+def test_expire_null_ttl_missing_key(api):
+    """expire-null-ttl-missing-key: 키가 없으면 ttl null보다 found false가 먼저다."""
+    client, _ = api
+
+    check(
+        client.post("/kv/expire", json={"key": "missing", "ttl": None}),
+        200,
+        {"found": False},
+    )

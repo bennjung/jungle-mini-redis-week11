@@ -24,12 +24,14 @@
 
 ## TTL·만료 처리 후속 작업
 
+> **완료(2026-11-14):** TTL 저장소·HTTP 표면·active 타이머 구현과 테스트 동결을 마쳤다. 현재 계약은 [TTL 계약](resc/scenario_01_storage/01-ttl-contract.md)·[테스트 계약](resc/scenario_01_storage/01-ttl-test-cases.md)·[A/B/C 계약](resc/scenario_01_storage/01-ttl-top-down-functions.md)을 따른다. 아래 목록은 착수 전 검토 기록이다.
+
 ### 근거와 현재 상태
 
 - 요구사항 원문: [resc/phase.md](resc/phase.md)의 “보관 기간이 만료된 값을 요청받았을 때, 이를 어떻게 처리할지 방안을 마련합니다.”
-- 관련 초안: [응답 캐시 시나리오](resc/scenario_04_response_cache/04-response-cache-scenario.md)의 S4-02. 만료 및 재사용 정책은 아직 미확정이며, 초안을 구현 계약으로 사용하지 않는다.
-- [저장소 시나리오](resc/scenario_01_storage/01-storage-scenario.md)의 기존 계약은 시간 만료를 제외한다. [작업 기록](resc/scenario_01_storage/storage-test-worklog.md)의 저장소 단위 테스트 54개 통과는 TTL 검증을 포함하지 않는다.
-- 아래 목록은 후속 검토용이며, TTL의 동작이나 내부 설계를 확정하지 않는다.
+- 관련 초안: [응답 캐시 시나리오](resc/scenario_04_response_cache/04-response-cache-scenario.md)의 S4-02. 테스트 입력은 [T1-21](resc/scenario_01_storage/01-ttl-test-cases.md)에서 동결했다.
+- [저장소 시나리오](resc/scenario_01_storage/01-storage-scenario.md)의 기존 계약은 시간 만료를 제외한다. TTL은 별도 계약과 테스트에서 다룬다.
+- 아래 목록은 착수 전 검토 기록이며, 현재 계약을 대체하지 않는다.
 
 ### 작업 목록
 

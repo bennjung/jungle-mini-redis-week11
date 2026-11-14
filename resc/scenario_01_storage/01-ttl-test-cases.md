@@ -3,7 +3,7 @@
 ## 기준과 상태
 
 - 기준: [01 TTL 계약](01-ttl-contract.md), [04 날씨 TTL/LDC 결정 로그](../scenario_04_response_cache/04-weather-ttl-decision-log.md), [REST API 9절](../../rest-api.md).
-- 이 문서는 확정된 TTL 행동을 정확한 입력·관찰로 구체화한 테스트 계약이다. 아래 표본은 계약을 검증하기 위한 입력이며 새 기능·정책을 추가하지 않는다. 2026-11-14에 T1-01~18, T1-20~21, T1-23~24의 입력·기대를 동결했다. T1-19는 C가 타이머와 함께 동결한다.
+- 이 문서는 확정된 TTL 행동을 정확한 입력·관찰로 구체화한 테스트 계약이다. 아래 표본은 계약을 검증하기 위한 입력이며 새 기능·정책을 추가하지 않는다. 2026-11-14에 T1-01~18, T1-20~21, T1-23~25의 입력·기대를 동결했다. T1-19는 C가 타이머와 함께 동결한다.
 - 저장소 코어 테스트: `tests/scenario_01_storage/test_ttl_storage.py`. Active 만료 테스트: `tests/scenario_01_storage/test_ttl_active.py`. HTTP 표면 테스트: `tests/scenario_01_storage/test_ttl_http.py`. 타이머 task 테스트: `tests/scenario_01_storage/test_ttl_timer.py`(C). 날씨 소비자 기능 테스트: `tests/scenario_04_response_cache/test_weather_cache.py`.
 - 테스트 helper: `tests/scenario_01_storage/ttl_state_helpers.py`, `tests/scenario_01_storage/ttl_clock_helpers.py`.
 - 구현 전에 테스트를 실행해 실패 원인을 확인하고, 구현 뒤 같은 테스트를 다시 실행한다. 테스트에 맞추어 TTL 계약을 완화하지 않는다.
@@ -136,7 +136,7 @@
 
 ## T1-14. active 만료 — 기본 표본
 
-> T1-14~18은 tick 함수를 직접 호출하고 `keys[:k]` 고정 표본 선택기를 쓰는 조건부 초안이다. T1-19는 C의 타이머 테스트다.
+> T1-14~18은 tick 함수를 직접 호출하고 `keys[:k]` 고정 표본 선택기를 쓴다. T1-19는 C의 타이머 테스트다.
 
 - 사전 상태: TTL 1_000ms인 키 25개를 `set`으로 만든다. `advance(1_000)`.
 - 입력: 표본 선택기는 현재 `_ttl_keys`의 앞에서부터 최대 20개를 반환한다. `_maybe_active_expire()`를 호출한다.
@@ -194,6 +194,7 @@
 | expire-delete | `PUT /kv` ttl 600000 | `POST /kv/expire` `{"key":"ttl:one","ttl":0}` | 200, `{"found":true,"ttl":0}`. `GET /kv`는 `found:false` |
 | expire-missing | 없음 | `POST /kv/expire` `{"key":"missing","ttl":1000}` | 200, `{"found":false}` |
 | expire-key-omitted | 없음 | `POST /kv/expire` `{"ttl":1000}` | 400, `{"error":"INVALID_INPUT"}`. 저장소 호출 0 |
+| expire-null-ttl-missing-key | 없음 | `POST /kv/expire` `{"key":"missing","ttl":null}` | 200, `{"found":false}`. 키 존재 판정이 TTL 검증보다 먼저 |
 | persist | `PUT /kv` ttl 600000 | `POST /kv/persist` `{"key":"ttl:one"}` | 200, `{"found":true,"persisted":true}`. `GET /kv/ttl`은 `ttl:-1` |
 | persist-no-ttl | `PUT /kv` TTL 없음 | `POST /kv/persist` `{"key":"ttl:one"}` | 200, `{"found":true,"persisted":false}` |
 | persist-missing | 없음 | `POST /kv/persist` `{"key":"missing"}` | 200, `{"found":false}` |
@@ -240,6 +241,14 @@
 - 검증 시점: 각 호출 직후.
 - 기대: 만료 판정과 남은 시간 계산이 같은 시각을 쓴다. 유효한 키에 `ttl: 0`을 반환하지 않는다.
 - 유지: 시계를 두 번 읽어 만료 경계를 넘는 경우를 만들지 않는다.
+
+## T1-25. active tick — TTL 키 없음
+
+- 사전 상태: TTL 키 없음. TTL 없는 키 1개를 `set`으로 둔다.
+- 입력: `_maybe_active_expire()`.
+- 검증 시점: 호출 직후.
+- 기대: sampler 호출 0, 예외 없음, 불변 조건 유지. TTL 없는 키는 보존된다.
+- 유지: tick은 빈 목록을 따로 검사하지 않고 cycle이 `(0, 0)`으로 끝난다.
 
 ## T1-22. 확정 요약 (테스트 대상 아님)
 

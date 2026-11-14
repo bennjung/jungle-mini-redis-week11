@@ -40,7 +40,7 @@
 | helper | 역할 |
 | --- | --- |
 | `_now_ms()` | 현재 시각을 정수 epoch ms로 반환한다 |
-| `_drop_key(key)` | 네 구조에서 키를 제거한다. TTL 구조 제거의 **유일한 경로**다. `_ttl_keys`는 swap-pop으로 O(1)에 지운다 |
+| `_drop_key(key)` | 네 구조에서 키를 제거한다. 키 제거의 **유일한 경로**이며, TTL만 제거할 때는 `_clear_ttl`을 쓴다. `_ttl_keys`는 swap-pop으로 O(1)에 지운다 |
 | `_set_ttl(key, expiry_ms)` | `_expires`에 절대 만료 시각을 쓴다. TTL이 없던 키면 `_ttl_keys` 끝에 추가하고 `_ttl_pos`를 기록한다 |
 | `_clear_ttl(key)` | TTL 구조에서만 제거하고 `value`는 남긴다 |
 | `_lazy_expire(key, now_ms=None)` | 주어진 시각(없으면 현재)으로 그 키가 만료됐는지 확인하고, 만료면 `_drop_key`를 호출한다. 만료 여부를 반환한다 |
@@ -68,6 +68,7 @@
 ### `expire(key, ttl)`
 
 - 키 검증 → lazy 만료 → 키 없음·만료면 `{"found": False}`.
+- 키 존재 판정이 TTL 타입 검증보다 앞선다. 없는 키·만료된 키 + 잘못된 `ttl`은 `INVALID_INPUT`이 아니라 `{"found": False}`이고, lazy 정리가 먼저 일어날 수 있다.
 - `ttl`은 필수이고 `bool`이 아닌 정수다. `None`·`bool`·`float`·문자열은 `INVALID_INPUT`.
 - `ttl > 0`이면 TTL을 설정·갱신하고 `{"found": True, "ttl": ttl}`.
 - `ttl <= 0`이면 키와 `value`를 즉시 삭제하고 `{"found": True, "ttl": 0}`.

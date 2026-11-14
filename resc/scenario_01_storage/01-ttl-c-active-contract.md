@@ -13,7 +13,7 @@
 | 수정 파일 | `storage.py`의 active 구간, `app.py`의 lifespan 타이머 블록, `tests/scenario_01_storage/test_ttl_active.py`, `tests/scenario_01_storage/ttl_clock_helpers.py`, `tests/scenario_01_storage/test_ttl_timer.py` |
 | 담당 함수 | `_maybe_active_expire`, `_active_expire_cycle`, `_timer_loop` |
 | 테스트 helper | `FakeClock`, `FirstKSampler` |
-| 테스트 | T1-14~19 |
+| 테스트 | T1-14~19, T1-25 |
 
 ## 실행 구조
 
@@ -75,7 +75,7 @@ async def lifespan(app):
 
 ## 테스트
 
-- 동결된 입력과 기대값은 [TTL 테스트 계약](01-ttl-test-cases.md)의 T1-14~18을 따른다. tick 함수를 직접 호출하고, 실제 100ms를 기다리지 않는다.
+- 동결된 입력과 기대값은 [TTL 테스트 계약](01-ttl-test-cases.md)의 T1-14~18, T1-25를 따른다. tick 함수를 직접 호출하고, 실제 100ms를 기다리지 않는다.
 - T1-19(유휴 상태의 타이머)는 C가 작성한다. `_timer_loop`에 가짜 sleep을 주입해 tick 횟수를 제어하고 실제 100ms를 기다리지 않는다.
 - `FakeClock`은 기준 ms와 `advance(ms)`를 제공한다. `FirstKSampler`는 현재 `keys`의 앞에서부터 최대 `k`개를 돌려준다.
 - 각 테스트 뒤 `assert_ttl_invariants(store)`로 네 구조의 일관성을 확인한다.
@@ -92,4 +92,4 @@ async def lifespan(app):
 
 - 선행: B의 `_now_ms`, `_drop_key`, TTL 구조, `_sampler` 필드.
 - 순서: helper와 테스트를 먼저 작성하고, B의 코어가 준비된 뒤 구현한다. B가 함수 단위로 병합한다.
-- 완료: T1-14~19 통과. 불변 조건 유지. 타이머 시작·종료가 앱 수명주기와 맞고, 기존 01·02·04 테스트 회귀 통과.
+- 완료: T1-14~19, T1-25 통과. 불변 조건 유지. 타이머 시작·종료가 앱 수명주기와 맞고, 기존 01·02·04 테스트 회귀 통과.

@@ -1,9 +1,9 @@
-# 01 TTL 탑다운 함수 계약 (3인 분업 초안)
+# 01 TTL 탑다운 함수 계약 (3인 분업)
 
 ## 기준과 상태
 
 - 기준: [01 TTL 계약](01-ttl-contract.md), [01 TTL 테스트 계약](01-ttl-test-cases.md), [REST API 9절](../../rest-api.md), [04 날씨 TTL/LDC 결정 로그](../scenario_04_response_cache/04-weather-ttl-decision-log.md).
-- 이 문서는 TTL 기능을 기존 `app.py` → `storage.py` 흐름에 배치하고, 테스트 작성부터 구현까지 3인 분업 경계를 정하는 설계 초안이다.
+- 이 문서는 TTL 기능을 기존 `app.py` → `storage.py` 흐름에 배치하고, 테스트 작성부터 구현까지 3인 분업 경계를 정하는 설계다.
 - `[확정]` 2026-11-14 구현 범위: 01 TTL 전체(저장소 코어·active tick·HTTP 표면·`incr`/`decr` lazy)와 04 날씨 소비자 테스트(T1-21)까지를 한 조각으로 구현한다. 타이머 task와 T1-19는 C가 구현한다. 03 성능 재측정·대량 무효화는 제외하고, 원본 API 실패 응답은 MiniRedis 범위가 아니므로 다루지 않는다.
 - 함수 이름·인자·내부 helper 이름은 2026-11-14에 동결했다. 이후 변경은 계약 수정과 사용자 확인을 거친다.
 - `[미정]` 항목은 구현으로 확정하지 않는다. 담당 범위의 테스트를 작성하기 전에 사용자 확인을 받는다.
@@ -72,7 +72,7 @@ lifespan 타이머 task — app.py (C)
 | 함수 | 소유 | 역할 | 반환 |
 | --- | --- | --- | --- |
 | `_now_ms()` | B | 현재 시각을 정수 epoch ms로 돌려준다. 테스트는 `FakeClock`을 주입한다 | `int` |
-| `_drop_key(key)` | B | `_data`·`_expires`·`_ttl_keys`·`_ttl_pos`에서 키를 제거한다. TTL 구조 제거의 유일한 경로다 | 없음 |
+| `_drop_key(key)` | B | `_data`·`_expires`·`_ttl_keys`·`_ttl_pos`에서 키를 제거한다. 키 제거의 유일한 경로이며, TTL만 제거할 때는 `_clear_ttl`을 쓴다 | 없음 |
 | `_set_ttl(key, expiry_ms)` | B | `_expires`에 절대 만료 시각을 기록한다. TTL이 없던 키면 `_ttl_keys`에 추가한다 | 없음 |
 | `_clear_ttl(key)` | B | TTL 구조에서만 제거하고 `value`는 남긴다 | 없음 |
 | `_lazy_expire(key, now_ms=None)` | B | 주어진 시각(없으면 현재)으로 만료를 확인하고, 만료면 `_drop_key`를 호출한다 | 만료 여부 |
@@ -104,7 +104,7 @@ lifespan 타이머 task — app.py (C)
 | --- | --- | --- | --- | --- |
 | [**A. HTTP 경계·소비자**](01-ttl-a-http-contract.md) | `app.py`(HTTP handler), `tests/scenario_01_storage/test_ttl_http.py`, `tests/scenario_04_response_cache/test_weather_cache.py` | `put_kv`, `expire_kv`, `ttl_kv`, `persist_kv` | T1-20, T1-21 | B의 저장소 인터페이스, C의 `FakeClock` |
 | [**B. TTL 코어**](01-ttl-b-core-contract.md) | `storage.py`의 TTL 코어·public 메서드, `tests/scenario_01_storage/test_ttl_storage.py`, `tests/scenario_01_storage/ttl_state_helpers.py` | `__init__`, `_now_ms`, `_drop_key`, `_set_ttl`, `_clear_ttl`, `_lazy_expire`, `set`, `get`, `delete`, `expire`, `ttl`, `persist`, `incr`, `decr`, `_adjust` | T1-01~13, T1-23~24 | 없음 |
-| [**C. Active 만료·타이머**](01-ttl-c-active-contract.md) | `storage.py`의 active 구간, `app.py`의 lifespan 타이머 블록, `tests/scenario_01_storage/test_ttl_active.py`, `tests/scenario_01_storage/ttl_clock_helpers.py`, `tests/scenario_01_storage/test_ttl_timer.py` | `_maybe_active_expire`, `_active_expire_cycle`, `_timer_loop` | T1-14~19 | B의 `_now_ms`·`_drop_key`·TTL 구조 |
+| [**C. Active 만료·타이머**](01-ttl-c-active-contract.md) | `storage.py`의 active 구간, `app.py`의 lifespan 타이머 블록, `tests/scenario_01_storage/test_ttl_active.py`, `tests/scenario_01_storage/ttl_clock_helpers.py`, `tests/scenario_01_storage/test_ttl_timer.py` | `_maybe_active_expire`, `_active_expire_cycle`, `_timer_loop` | T1-14~19, T1-25 | B의 `_now_ms`·`_drop_key`·TTL 구조 |
 | **통합** | `storage.py` 병합, 전체 테스트 실행 | 함수 단위 병합·회귀 확인 | T1-01~18, T1-20~21 | A·B·C |
 
 - B가 `storage.py` 코어의 주 담당이다. C의 active 함수는 같은 파일에 들어가므로 B가 함수 단위로 병합한다. 어느 한쪽의 파일 전체로 다른 쪽을 덮어쓰지 않는다.
@@ -158,12 +158,12 @@ class MiniRedis:
 | `_set_ttl(key, expiry_ms)` | B | 키, 절대 만료 ms | TTL 추가·갱신. 없으면 목록 끝에 추가 | B |
 | `_clear_ttl(key)` | B | 키 | TTL만 제거하고 `value`는 유지 | B |
 | `_lazy_expire(key, now_ms=None)` | B | 키, 선택 시각 | 주어진 시각(없으면 현재)으로 만료 확인·필요 시 `_drop_key`; 만료 여부 반환 | B의 public 메서드 |
-| `_maybe_active_expire()` | C | 없음 | 타이머 tick. 사이클 최대 2회 | lifespan 타이머 task(후속) |
+| `_maybe_active_expire()` | C | 없음 | 타이머 tick. 사이클 최대 2회 | lifespan 타이머 task |
 | `_active_expire_cycle(now_ms)` | C | 현재 ms | 표본·만료 확인·`_drop_key`; `(expired_count, sample_size)` 반환 | C |
 
 - `_drop_key`는 swap-pop으로 O(1) 제거한다. C는 이 함수만 호출한다.
 - `_lazy_expire`는 입력 검증 뒤에 호출한다. 입력 거절 시에는 lazy 정리도 하지 않아 기존 상태 보존 규칙을 지킨다.
-- `_maybe_active_expire`는 타이머가 호출할 때마다 현재 시각을 읽고 `_active_expire_cycle`을 실행한다. 100ms 주기는 lifespan 타이머 task가 지킨다(후속 브랜치). `[확정]` D-24.
+- `_maybe_active_expire`는 타이머가 호출할 때마다 현재 시각을 읽고 `_active_expire_cycle`을 실행한다. 100ms 주기는 lifespan 타이머 task가 지킨다. `[확정]` D-24.
 - `_active_expire_cycle`은 `self._sampler`가 있으면 그것을, 없으면 중복 없는 기본 표본을 쓴다. 표본의 25% 이상이 만료면 `_maybe_active_expire`가 한 번 더 호출한다. 최대 2회다. `[확정]` 표본 중복 정책은 중복 없음이다.
 
 ### 3.4 HTTP → 저장소 호출
@@ -304,7 +304,7 @@ def _active_expire_cycle(self, now_ms):
 - **수정 가능:** `storage.py`의 `_maybe_active_expire`·`_active_expire_cycle`, `app.py`의 lifespan 타이머 블록, `test_ttl_active.py`, `test_ttl_timer.py`, `ttl_clock_helpers.py`.
 - **필수:** tick마다 사이클 최대 2회, 최대 20개 표본, 25% 이상 1회 추가, 삭제 전 현재 TTL 확인, `_drop_key`만 사용. `FakeClock`·`FirstKSampler` 제공. lifespan에서 task 생성·취소·대기.
 - **금지:** `app.py`의 HTTP handler 수정, public 메서드 본문 수정, TTL 구조 직접 변경, 별도 스레드·큐 도입.
-- **독립 검증:** T1-14~19. T1-14~18은 tick 함수를 직접 호출해 표본·25%·반복 상한·보존을 확인하고, T1-19는 타이머의 유휴 실행을 확인한다.
+- **독립 검증:** T1-14~19, T1-25. T1-14~18은 tick 함수를 직접 호출해 표본·25%·반복 상한·보존을 확인하고, T1-19는 타이머의 유휴 실행, T1-25는 TTL 키가 없을 때의 종료를 확인한다.
 
 ### 통합
 
@@ -317,10 +317,10 @@ def _active_expire_cycle(self, now_ms):
 
 1. **B의 인터페이스 동결** — `MiniRedis(clock, sampler)`, 자료구조, `_now_ms`, `_drop_key`, `_set_ttl`, `_clear_ttl`, `_lazy_expire`, public 메서드 시그니처.
 2. **C의 helper 먼저** — `FakeClock`·`FirstKSampler`와 `_active_expire_cycle` stub. tick의 입력·반환을 고정한다.
-3. **A·B·C의 테스트 작성** — A는 T1-20~21, B는 T1-01~13, C는 T1-14~19. 구현 전에 실행해 실패 원인을 기록한다.
+3. **A·B·C의 테스트 작성** — A는 T1-20~21, B는 T1-01~13, C는 T1-14~19·T1-25. 구현 전에 실행해 실패 원인을 기록한다.
 4. **B 코어 구현** — T1-01~13 통과. A의 HTTP 테스트가 저장소 경로로 통과할 수 있게 한다.
 5. **A의 HTTP·소비자 구현** — T1-20·21 통과.
-6. **C의 active·타이머 구현** — T1-14~19 통과. B가 active 함수를 병합한다.
+6. **C의 active·타이머 구현** — T1-14~19, T1-25 통과. B가 active 함수를 병합한다.
 7. **통합 검증** — 전체 TTL 테스트, 타이머 시작·종료, 기존 01·02 회귀, 04 날씨 경로. 03 성능 재측정은 별도다.
 
 - 1~2는 공통 선행 조건이다. 3은 1~2 뒤에 병렬로 시작할 수 있다. 4~6은 각자 범위에서 병렬로 진행하되, B의 `storage.py` 병합이 마지막에 필요하다.
@@ -337,6 +337,7 @@ def _active_expire_cycle(self, now_ms):
 | `_set_ttl`·`_clear_ttl`·`_drop_key`·불변 조건 | T1-01~13 | B |
 | `incr`·`decr`의 lazy 만료·TTL 유지 | T1-23 | B |
 | `_maybe_active_expire`·`_active_expire_cycle` | T1-14~18 | C |
+| 빈 TTL 집합 tick | T1-25 | C |
 | `FakeClock`·`FirstKSampler` | T1-14~18, T1-21 | C |
 | `ttl_snapshot`·`assert_ttl_invariants` | T1-01~13 | B |
 | lifespan 타이머 task | T1-19 | C |
@@ -359,7 +360,7 @@ def _active_expire_cycle(self, now_ms):
 ## 9. 이 분업이 만족해야 하는 조건
 
 - 세 사람이 같은 `storage.py`를 수정하더라도 함수 단위 소유가 겹치지 않는다. B는 코어·public 메서드, C는 active 두 함수와 `app.py` lifespan 블록만 수정한다.
-- `_drop_key`가 TTL 구조 제거의 유일한 경로다. B와 C가 각자 제거 로직을 만들지 않는다.
+- `_drop_key`가 키 제거의 유일한 경로다. B와 C가 각자 제거 로직을 만들지 않는다.
 - A는 HTTP 계약만, B는 저장소 계약만, C는 active 계약만 책임진다. 한 사람의 테스트를 다른 사람이 구현에 맞춰 바꾸지 않는다.
 - 테스트를 먼저 작성하고 구현 전 실패를 확인한다. 통과·실패·미검증을 구분해 기록한다.
 - 미정 항목을 편의상 확정하거나 새 기능으로 추가하지 않는다. 막히면 그 지점만 사용자에게 확인한다.

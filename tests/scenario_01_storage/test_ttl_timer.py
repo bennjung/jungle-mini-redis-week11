@@ -6,6 +6,7 @@
 """
 
 import asyncio
+import logging
 
 import pytest
 
@@ -81,3 +82,25 @@ def test_t1_19_idle_tick_expires_expired_key():
     assert store.get("idle:one") == {"found": False}
     assert ttl_snapshot(store) == ({}, [], {})
     assert_ttl_invariants(store)
+
+
+def test_timer_stops_after_tick_exception(caplog):
+    """tick 예외는 로그를 남기고 task를 끝낸다. 앱은 계속 동작한다."""
+    ticks = []
+
+    class FailingStorage:
+        def _maybe_active_expire(self):
+            ticks.append(1)
+            raise RuntimeError("boom")
+
+    async def fake_sleep(interval):
+        return
+
+    async def scenario():
+        await _timer_loop(FailingStorage(), interval=0.1, sleep=fake_sleep)
+
+    with caplog.at_level(logging.ERROR):
+        asyncio.run(scenario())
+
+    assert ticks == [1]
+    assert "TTL active cleanup failed" in caplog.text

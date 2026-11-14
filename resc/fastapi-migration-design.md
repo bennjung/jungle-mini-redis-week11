@@ -7,6 +7,7 @@
 - 기준 코드: `git show HEAD:app.py`(Flask), `storage.py`, 기존 테스트, [REST API 명세](../rest-api.md), [HTTP 담당 범위](scenario_01_storage/01-http-scope.md).
 - 원칙: **저장소 로직·도메인 계약·확정 HTTP 계약은 동일**하다. 프레임워크, 테스트 fixture, 실행·문서의 구현 서술만 필요한 만큼 바꾼다.
 - 이번 마이그레이션은 TTL·active cleanup의 실제 동작을 구현하지 않는다. FastAPI lifespan에서 maintenance task를 소유할 자리만 마련하고, 실제 연결은 TTL 구현 단계에서 한다.
+- **후속 완료(2026-11-14):** TTL·active cleanup이 구현됐다. lifespan은 `_timer_loop`를 소유하고, 동작은 [C. Active 만료·타이머](scenario_01_storage/01-ttl-c-active-contract.md)를 따른다. 이 문서의 "미구현" 서술은 마이그레이션 시점의 범위다.
 
 ## 2. 기준 코드의 동작
 
