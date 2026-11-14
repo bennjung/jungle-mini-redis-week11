@@ -224,6 +224,7 @@ def persist_kv():
 
 - A는 TTL 타입·범위를 직접 판정하지 않는다. `storage`가 반환한 `INVALID_INPUT`을 400으로 연결한다.
 - `expire`의 `ttl` 필드가 없으면 저장소를 호출하지 않고 400 `INVALID_INPUT`을 반환한다. `ttl: null`은 저장소에 전달하고 저장소가 거절한다.
+- `expire`·`persist`는 계약 필드 외 추가 필드를 무시한다. `PUT /kv`와 같다.
 - 기존 `put_kv`의 `key`·`value` 필수 검사와 `ERROR_STATUS` 매핑을 유지한다.
 - A는 `storage` 내부 상태를 조회하지 않는다.
 
@@ -345,7 +346,7 @@ def _active_expire_cycle(self, now_ms):
 - `[확정]` 표본은 중복 없이 뽑는다(`random.sample`). 키가 20개 미만이면 전체를 검사한다.
 - `[제안]` 테스트 파일 분담: `test_ttl_storage.py`(B), `test_ttl_active.py`(C), `test_ttl_http.py`·`test_weather_cache.py`(A). 타이머 task 시험은 후속 `test_ttl_timer.py`(A).
 - `[확정]` `incr`·`decr`는 lazy 만료 검사를 하고, 만료된 키는 `NOT_FOUND`, 살아 있는 키의 TTL은 유지한다(T1-23).
-- `[미정]` `POST /kv/expire`·`POST /kv/persist`의 알 수 없는 추가 필드 정책.
+- `[확정]` `POST /kv/expire`·`POST /kv/persist`는 계약 필드 외 추가 필드를 무시한다. `PUT /kv`와 같고, `incr`/`decr`의 거절 규칙과 구분한다.
 - `[미정]` 원본 실패·MiniRedis 실패 시 날씨 소비자 응답.
 
 ## 9. 이 분업이 만족해야 하는 조건
