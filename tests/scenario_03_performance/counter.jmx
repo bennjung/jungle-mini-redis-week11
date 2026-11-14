@@ -1,0 +1,842 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jmeterTestPlan version="1.2" properties="5.0" jmeter="5.6.3">
+  <hashTree>
+<TestPlan guiclass="TestPlanGui" testclass="TestPlan" testname="시나리오 03 카운터 성능 비교" enabled="true">
+  <stringProp name="TestPlan.comments">M3: HTTP/JDBC 직접 경로, 전체 N Throughput Controller, 워밍업 100건, 대표 초기화·전체 시작, 요청별 논리적 마감</stringProp>
+  <boolProp name="TestPlan.functional_mode">false</boolProp>
+  <boolProp name="TestPlan.serialize_threadgroups">false</boolProp>
+  <elementProp name="TestPlan.user_defined_variables" elementType="Arguments" guiclass="ArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+    <collectionProp name="Arguments.arguments"/>
+  </elementProp>
+  <stringProp name="TestPlan.user_define_classpath"></stringProp>
+</TestPlan>
+<hashTree>
+<JDBCDataSource guiclass="TestBeanGUI" testclass="JDBCDataSource" testname="m3-mysql" enabled="true">
+  <boolProp name="autocommit">true</boolProp>
+  <stringProp name="checkQuery"></stringProp>
+  <stringProp name="connectionAge">0</stringProp>
+  <stringProp name="connectionProperties"></stringProp>
+  <stringProp name="dataSource">m3-mysql</stringProp>
+  <stringProp name="dbUrl">${__P(m3.jdbc.url)}</stringProp>
+  <stringProp name="driver">com.mysql.cj.jdbc.Driver</stringProp>
+  <stringProp name="initQuery"></stringProp>
+  <boolProp name="keepAlive">false</boolProp>
+  <stringProp name="password">${__P(m3.jdbc.password)}</stringProp>
+  <stringProp name="poolMax">0</stringProp>
+  <boolProp name="preinit">false</boolProp>
+  <stringProp name="timeout">10000</stringProp>
+  <stringProp name="transactionIsolation">DEFAULT</stringProp>
+  <stringProp name="trimInterval">60000</stringProp>
+  <stringProp name="username">${__P(m3.jdbc.user)}</stringProp>
+</JDBCDataSource>
+<hashTree/>
+<SetupThreadGroup guiclass="SetupThreadGroupGui" testclass="SetupThreadGroup" testname="m3-setUp" enabled="true">
+  <stringProp name="ThreadGroup.on_sample_error">stoptest</stringProp>
+  <elementProp name="ThreadGroup.main_controller" elementType="LoopController" guiclass="LoopControlPanel" testclass="LoopController" testname="Loop Controller" enabled="true">
+    <boolProp name="LoopController.continue_forever">false</boolProp>
+    <stringProp name="LoopController.loops">1</stringProp>
+  </elementProp>
+  <stringProp name="ThreadGroup.num_threads">1</stringProp>
+  <stringProp name="ThreadGroup.ramp_time">0</stringProp>
+  <longProp name="ThreadGroup.start_time">0</longProp>
+  <longProp name="ThreadGroup.end_time">0</longProp>
+  <boolProp name="ThreadGroup.scheduler">false</boolProp>
+  <stringProp name="ThreadGroup.duration"></stringProp>
+  <stringProp name="ThreadGroup.delay"></stringProp>
+  <boolProp name="ThreadGroup.same_user_on_next_iteration">false</boolProp>
+</SetupThreadGroup>
+<hashTree>
+<JSR223Sampler guiclass="TestBeanGUI" testclass="JSR223Sampler" testname="m3-setup" enabled="true">
+  <stringProp name="scriptLanguage">groovy</stringProp>
+  <stringProp name="parameters">setup</stringProp>
+  <stringProp name="filename">counter.groovy</stringProp>
+  <stringProp name="cacheKey">m3-setup</stringProp>
+  <stringProp name="script"></stringProp>
+</JSR223Sampler>
+<hashTree/>
+<IfController guiclass="IfControllerPanel" testclass="IfController" testname="m3-setup-http-target" enabled="true">
+  <stringProp name="IfController.condition">${__P(m3.target.http)}</stringProp>
+  <boolProp name="IfController.evaluateAll">false</boolProp>
+  <boolProp name="IfController.useExpression">true</boolProp>
+</IfController>
+<hashTree>
+<HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="m3-setup-http-put" enabled="true">
+  <boolProp name="HTTPSampler.postBodyRaw">true</boolProp>
+  <elementProp name="HTTPsampler.Arguments" elementType="Arguments">
+    <collectionProp name="Arguments.arguments">
+      <elementProp name="" elementType="HTTPArgument">
+      <boolProp name="HTTPArgument.always_encode">false</boolProp>
+      <stringProp name="Argument.value">{"key":"counter:one","value":0}</stringProp>
+      <stringProp name="Argument.metadata">=</stringProp>
+    </elementProp>
+    </collectionProp>
+  </elementProp>
+  <stringProp name="HTTPSampler.domain">${__P(m3.http.host)}</stringProp>
+  <stringProp name="HTTPSampler.port">${__P(m3.http.port)}</stringProp>
+  <stringProp name="HTTPSampler.protocol">${__P(m3.http.scheme)}</stringProp>
+  <stringProp name="HTTPSampler.contentEncoding">UTF-8</stringProp>
+  <stringProp name="HTTPSampler.path">/kv</stringProp>
+  <stringProp name="HTTPSampler.method">PUT</stringProp>
+  <boolProp name="HTTPSampler.follow_redirects">false</boolProp>
+  <boolProp name="HTTPSampler.auto_redirects">false</boolProp>
+  <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+  <boolProp name="HTTPSampler.DO_MULTIPART_POST">false</boolProp>
+  <stringProp name="HTTPSampler.embedded_url_re"></stringProp>
+  <stringProp name="HTTPSampler.connect_timeout">${__P(m3.http.connect_timeout_ms)}</stringProp>
+  <stringProp name="HTTPSampler.response_timeout">${__P(m3.http.response_timeout_ms)}</stringProp>
+  <stringProp name="HTTPSampler.implementation">HttpClient4</stringProp>
+  <stringProp name="HTTPSampler.monitor">false</stringProp>
+  <stringProp name="HTTPSampler.IPSource"></stringProp>
+</HTTPSamplerProxy>
+<hashTree>
+<JSR223PostProcessor guiclass="TestBeanGUI" testclass="JSR223PostProcessor" testname="m3-setup-http-put-post" enabled="true">
+  <stringProp name="scriptLanguage">groovy</stringProp>
+  <stringProp name="parameters">setup-http-put</stringProp>
+  <stringProp name="filename">counter.groovy</stringProp>
+  <stringProp name="cacheKey">m3-setup-http-put</stringProp>
+  <stringProp name="script"></stringProp>
+</JSR223PostProcessor>
+<hashTree/>
+<HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="JSON Content-Type" enabled="true">
+  <collectionProp name="HeaderManager.headers">
+    <elementProp name="" elementType="Header">
+      <stringProp name="Header.name">Content-Type</stringProp>
+      <stringProp name="Header.value">application/json</stringProp>
+    </elementProp>
+  </collectionProp>
+</HeaderManager>
+<hashTree/>
+</hashTree>
+<HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="m3-setup-http-get" enabled="true">
+  <boolProp name="HTTPSampler.postBodyRaw">false</boolProp>
+  <elementProp name="HTTPsampler.Arguments" elementType="Arguments">
+    <collectionProp name="Arguments.arguments">
+      <elementProp name="key" elementType="HTTPArgument">
+      <boolProp name="HTTPArgument.always_encode">true</boolProp>
+      <stringProp name="Argument.value">counter:one</stringProp>
+      <stringProp name="Argument.metadata">=</stringProp>
+      <boolProp name="HTTPArgument.use_equals">true</boolProp>
+      <stringProp name="Argument.name">key</stringProp>
+    </elementProp>
+    </collectionProp>
+  </elementProp>
+  <stringProp name="HTTPSampler.domain">${__P(m3.http.host)}</stringProp>
+  <stringProp name="HTTPSampler.port">${__P(m3.http.port)}</stringProp>
+  <stringProp name="HTTPSampler.protocol">${__P(m3.http.scheme)}</stringProp>
+  <stringProp name="HTTPSampler.contentEncoding">UTF-8</stringProp>
+  <stringProp name="HTTPSampler.path">/kv</stringProp>
+  <stringProp name="HTTPSampler.method">GET</stringProp>
+  <boolProp name="HTTPSampler.follow_redirects">false</boolProp>
+  <boolProp name="HTTPSampler.auto_redirects">false</boolProp>
+  <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+  <boolProp name="HTTPSampler.DO_MULTIPART_POST">false</boolProp>
+  <stringProp name="HTTPSampler.embedded_url_re"></stringProp>
+  <stringProp name="HTTPSampler.connect_timeout">${__P(m3.http.connect_timeout_ms)}</stringProp>
+  <stringProp name="HTTPSampler.response_timeout">${__P(m3.http.response_timeout_ms)}</stringProp>
+  <stringProp name="HTTPSampler.implementation">HttpClient4</stringProp>
+  <stringProp name="HTTPSampler.monitor">false</stringProp>
+  <stringProp name="HTTPSampler.IPSource"></stringProp>
+</HTTPSamplerProxy>
+<hashTree>
+<JSR223PostProcessor guiclass="TestBeanGUI" testclass="JSR223PostProcessor" testname="m3-setup-http-get-post" enabled="true">
+  <stringProp name="scriptLanguage">groovy</stringProp>
+  <stringProp name="parameters">setup-http-get</stringProp>
+  <stringProp name="filename">counter.groovy</stringProp>
+  <stringProp name="cacheKey">m3-setup-http-get</stringProp>
+  <stringProp name="script"></stringProp>
+</JSR223PostProcessor>
+<hashTree/>
+</hashTree>
+</hashTree>
+<IfController guiclass="IfControllerPanel" testclass="IfController" testname="m3-setup-jdbc-target" enabled="true">
+  <stringProp name="IfController.condition">${__P(m3.target.jdbc)}</stringProp>
+  <boolProp name="IfController.evaluateAll">false</boolProp>
+  <boolProp name="IfController.useExpression">true</boolProp>
+</IfController>
+<hashTree>
+<JDBCSampler guiclass="TestBeanGUI" testclass="JDBCSampler" testname="m3-setup-jdbc-insert" enabled="true">
+  <stringProp name="dataSource">m3-mysql</stringProp>
+  <stringProp name="queryType">Prepared Update Statement</stringProp>
+  <stringProp name="query">INSERT IGNORE INTO benchmark_counter (counter_key, value) VALUES (?, 0)</stringProp>
+  <stringProp name="queryArguments">counter:one</stringProp>
+  <stringProp name="queryArgumentsTypes">VARBINARY</stringProp>
+  <stringProp name="variableNames"></stringProp>
+  <stringProp name="resultVariable"></stringProp>
+  <stringProp name="queryTimeout">${__P(m3.prep_jdbc_timeout_s)}</stringProp>
+  <stringProp name="resultSetMaxRows"></stringProp>
+  <boolProp name="collectDiagnostics">false</boolProp>
+</JDBCSampler>
+<hashTree>
+<JSR223PostProcessor guiclass="TestBeanGUI" testclass="JSR223PostProcessor" testname="m3-setup-jdbc-insert-post" enabled="true">
+  <stringProp name="scriptLanguage">groovy</stringProp>
+  <stringProp name="parameters">setup-jdbc-insert</stringProp>
+  <stringProp name="filename">counter.groovy</stringProp>
+  <stringProp name="cacheKey">m3-setup-jdbc-insert</stringProp>
+  <stringProp name="script"></stringProp>
+</JSR223PostProcessor>
+<hashTree/>
+</hashTree>
+<JDBCSampler guiclass="TestBeanGUI" testclass="JDBCSampler" testname="m3-setup-jdbc-update" enabled="true">
+  <stringProp name="dataSource">m3-mysql</stringProp>
+  <stringProp name="queryType">Prepared Update Statement</stringProp>
+  <stringProp name="query">UPDATE benchmark_counter SET value = 0 WHERE counter_key = ?</stringProp>
+  <stringProp name="queryArguments">counter:one</stringProp>
+  <stringProp name="queryArgumentsTypes">VARBINARY</stringProp>
+  <stringProp name="variableNames"></stringProp>
+  <stringProp name="resultVariable"></stringProp>
+  <stringProp name="queryTimeout">${__P(m3.prep_jdbc_timeout_s)}</stringProp>
+  <stringProp name="resultSetMaxRows"></stringProp>
+  <boolProp name="collectDiagnostics">false</boolProp>
+</JDBCSampler>
+<hashTree>
+<JSR223PostProcessor guiclass="TestBeanGUI" testclass="JSR223PostProcessor" testname="m3-setup-jdbc-update-post" enabled="true">
+  <stringProp name="scriptLanguage">groovy</stringProp>
+  <stringProp name="parameters">setup-jdbc-update</stringProp>
+  <stringProp name="filename">counter.groovy</stringProp>
+  <stringProp name="cacheKey">m3-setup-jdbc-update</stringProp>
+  <stringProp name="script"></stringProp>
+</JSR223PostProcessor>
+<hashTree/>
+</hashTree>
+<JDBCSampler guiclass="TestBeanGUI" testclass="JDBCSampler" testname="m3-setup-jdbc-get" enabled="true">
+  <stringProp name="dataSource">m3-mysql</stringProp>
+  <stringProp name="queryType">Prepared Select Statement</stringProp>
+  <stringProp name="query">SELECT value AS current_value FROM benchmark_counter WHERE counter_key = ?</stringProp>
+  <stringProp name="queryArguments">counter:one</stringProp>
+  <stringProp name="queryArgumentsTypes">VARBINARY</stringProp>
+  <stringProp name="variableNames">m3_final_value</stringProp>
+  <stringProp name="resultVariable"></stringProp>
+  <stringProp name="queryTimeout">${__P(m3.prep_jdbc_timeout_s)}</stringProp>
+  <stringProp name="resultSetMaxRows"></stringProp>
+  <boolProp name="collectDiagnostics">false</boolProp>
+</JDBCSampler>
+<hashTree>
+<JSR223PostProcessor guiclass="TestBeanGUI" testclass="JSR223PostProcessor" testname="m3-setup-jdbc-get-post" enabled="true">
+  <stringProp name="scriptLanguage">groovy</stringProp>
+  <stringProp name="parameters">setup-jdbc-get</stringProp>
+  <stringProp name="filename">counter.groovy</stringProp>
+  <stringProp name="cacheKey">m3-setup-jdbc-get</stringProp>
+  <stringProp name="script"></stringProp>
+</JSR223PostProcessor>
+<hashTree/>
+</hashTree>
+</hashTree>
+</hashTree>
+<ThreadGroup guiclass="ThreadGroupGui" testclass="ThreadGroup" testname="m3-measure" enabled="true">
+  <stringProp name="ThreadGroup.on_sample_error">continue</stringProp>
+  <elementProp name="ThreadGroup.main_controller" elementType="LoopController" guiclass="LoopControlPanel" testclass="LoopController" testname="Loop Controller" enabled="true">
+    <boolProp name="LoopController.continue_forever">false</boolProp>
+    <stringProp name="LoopController.loops">1</stringProp>
+  </elementProp>
+  <stringProp name="ThreadGroup.num_threads">${__P(m3.c)}</stringProp>
+  <stringProp name="ThreadGroup.ramp_time">0</stringProp>
+  <longProp name="ThreadGroup.start_time">0</longProp>
+  <longProp name="ThreadGroup.end_time">0</longProp>
+  <boolProp name="ThreadGroup.scheduler">false</boolProp>
+  <stringProp name="ThreadGroup.duration"></stringProp>
+  <stringProp name="ThreadGroup.delay"></stringProp>
+  <boolProp name="ThreadGroup.same_user_on_next_iteration">false</boolProp>
+</ThreadGroup>
+<hashTree>
+<JSR223Sampler guiclass="TestBeanGUI" testclass="JSR223Sampler" testname="m3-thread-prepare" enabled="true">
+  <stringProp name="scriptLanguage">groovy</stringProp>
+  <stringProp name="parameters">thread-prepare</stringProp>
+  <stringProp name="filename">counter.groovy</stringProp>
+  <stringProp name="cacheKey">m3-thread-prepare</stringProp>
+  <stringProp name="script"></stringProp>
+</JSR223Sampler>
+<hashTree/>
+<LoopController guiclass="LoopControlPanel" testclass="LoopController" testname="m3-warmup-loop" enabled="true">
+  <boolProp name="LoopController.continue_forever">false</boolProp>
+  <stringProp name="LoopController.loops">${__P(m3.warmup_per_thread)}</stringProp>
+</LoopController>
+<hashTree>
+<IfController guiclass="IfControllerPanel" testclass="IfController" testname="m3-warmup-http-target" enabled="true">
+  <stringProp name="IfController.condition">${__P(m3.target.http)}</stringProp>
+  <boolProp name="IfController.evaluateAll">false</boolProp>
+  <boolProp name="IfController.useExpression">true</boolProp>
+</IfController>
+<hashTree>
+<HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="m3-warmup-http-incr" enabled="true">
+  <boolProp name="HTTPSampler.postBodyRaw">true</boolProp>
+  <elementProp name="HTTPsampler.Arguments" elementType="Arguments">
+    <collectionProp name="Arguments.arguments">
+      <elementProp name="" elementType="HTTPArgument">
+      <boolProp name="HTTPArgument.always_encode">false</boolProp>
+      <stringProp name="Argument.value">{"key":"counter:one","amount":1}</stringProp>
+      <stringProp name="Argument.metadata">=</stringProp>
+    </elementProp>
+    </collectionProp>
+  </elementProp>
+  <stringProp name="HTTPSampler.domain">${__P(m3.http.host)}</stringProp>
+  <stringProp name="HTTPSampler.port">${__P(m3.http.port)}</stringProp>
+  <stringProp name="HTTPSampler.protocol">${__P(m3.http.scheme)}</stringProp>
+  <stringProp name="HTTPSampler.contentEncoding">UTF-8</stringProp>
+  <stringProp name="HTTPSampler.path">/kv/incr</stringProp>
+  <stringProp name="HTTPSampler.method">POST</stringProp>
+  <boolProp name="HTTPSampler.follow_redirects">false</boolProp>
+  <boolProp name="HTTPSampler.auto_redirects">false</boolProp>
+  <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+  <boolProp name="HTTPSampler.DO_MULTIPART_POST">false</boolProp>
+  <stringProp name="HTTPSampler.embedded_url_re"></stringProp>
+  <stringProp name="HTTPSampler.connect_timeout">${__P(m3.http.connect_timeout_ms)}</stringProp>
+  <stringProp name="HTTPSampler.response_timeout">${__P(m3.http.response_timeout_ms)}</stringProp>
+  <stringProp name="HTTPSampler.implementation">HttpClient4</stringProp>
+  <stringProp name="HTTPSampler.monitor">false</stringProp>
+  <stringProp name="HTTPSampler.IPSource"></stringProp>
+</HTTPSamplerProxy>
+<hashTree>
+<JSR223PreProcessor guiclass="TestBeanGUI" testclass="JSR223PreProcessor" testname="m3-warmup-http-incr-pre" enabled="true">
+  <stringProp name="scriptLanguage">groovy</stringProp>
+  <stringProp name="parameters">warmup-pre</stringProp>
+  <stringProp name="filename">counter.groovy</stringProp>
+  <stringProp name="cacheKey">m3-warmup-pre</stringProp>
+  <stringProp name="script"></stringProp>
+</JSR223PreProcessor>
+<hashTree/>
+<JSR223PostProcessor guiclass="TestBeanGUI" testclass="JSR223PostProcessor" testname="m3-warmup-http-incr-post" enabled="true">
+  <stringProp name="scriptLanguage">groovy</stringProp>
+  <stringProp name="parameters">warmup-post-http</stringProp>
+  <stringProp name="filename">counter.groovy</stringProp>
+  <stringProp name="cacheKey">m3-warmup-post-http</stringProp>
+  <stringProp name="script"></stringProp>
+</JSR223PostProcessor>
+<hashTree/>
+<HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="JSON Content-Type" enabled="true">
+  <collectionProp name="HeaderManager.headers">
+    <elementProp name="" elementType="Header">
+      <stringProp name="Header.name">Content-Type</stringProp>
+      <stringProp name="Header.value">application/json</stringProp>
+    </elementProp>
+  </collectionProp>
+</HeaderManager>
+<hashTree/>
+</hashTree>
+</hashTree>
+<IfController guiclass="IfControllerPanel" testclass="IfController" testname="m3-warmup-jdbc-target" enabled="true">
+  <stringProp name="IfController.condition">${__P(m3.target.jdbc)}</stringProp>
+  <boolProp name="IfController.evaluateAll">false</boolProp>
+  <boolProp name="IfController.useExpression">true</boolProp>
+</IfController>
+<hashTree>
+<JDBCSampler guiclass="TestBeanGUI" testclass="JDBCSampler" testname="m3-warmup-jdbc-incr" enabled="true">
+  <stringProp name="dataSource">m3-mysql</stringProp>
+  <stringProp name="queryType">Prepared Update Statement</stringProp>
+  <stringProp name="query">UPDATE benchmark_counter SET value = value + 1 WHERE counter_key = ?</stringProp>
+  <stringProp name="queryArguments">counter:one</stringProp>
+  <stringProp name="queryArgumentsTypes">VARBINARY</stringProp>
+  <stringProp name="variableNames"></stringProp>
+  <stringProp name="resultVariable"></stringProp>
+  <stringProp name="queryTimeout">${__P(m3.jdbc.query_timeout_s)}</stringProp>
+  <stringProp name="resultSetMaxRows"></stringProp>
+  <boolProp name="collectDiagnostics">false</boolProp>
+</JDBCSampler>
+<hashTree>
+<JSR223PreProcessor guiclass="TestBeanGUI" testclass="JSR223PreProcessor" testname="m3-warmup-jdbc-incr-pre" enabled="true">
+  <stringProp name="scriptLanguage">groovy</stringProp>
+  <stringProp name="parameters">warmup-pre</stringProp>
+  <stringProp name="filename">counter.groovy</stringProp>
+  <stringProp name="cacheKey">m3-warmup-pre</stringProp>
+  <stringProp name="script"></stringProp>
+</JSR223PreProcessor>
+<hashTree/>
+<JSR223PostProcessor guiclass="TestBeanGUI" testclass="JSR223PostProcessor" testname="m3-warmup-jdbc-incr-post" enabled="true">
+  <stringProp name="scriptLanguage">groovy</stringProp>
+  <stringProp name="parameters">warmup-post-jdbc</stringProp>
+  <stringProp name="filename">counter.groovy</stringProp>
+  <stringProp name="cacheKey">m3-warmup-post-jdbc</stringProp>
+  <stringProp name="script"></stringProp>
+</JSR223PostProcessor>
+<hashTree/>
+</hashTree>
+</hashTree>
+</hashTree>
+<IfController guiclass="IfControllerPanel" testclass="IfController" testname="m3-connection-target" enabled="true">
+  <stringProp name="IfController.condition">${__P(m3.target.jdbc)}</stringProp>
+  <boolProp name="IfController.evaluateAll">false</boolProp>
+  <boolProp name="IfController.useExpression">true</boolProp>
+</IfController>
+<hashTree>
+<JDBCSampler guiclass="TestBeanGUI" testclass="JDBCSampler" testname="m3-connection-id" enabled="true">
+  <stringProp name="dataSource">m3-mysql</stringProp>
+  <stringProp name="queryType">Select Statement</stringProp>
+  <stringProp name="query">SELECT CONNECTION_ID() AS connection_id</stringProp>
+  <stringProp name="queryArguments"></stringProp>
+  <stringProp name="queryArgumentsTypes"></stringProp>
+  <stringProp name="variableNames">m3_connection_id</stringProp>
+  <stringProp name="resultVariable"></stringProp>
+  <stringProp name="queryTimeout">${__P(m3.prep_jdbc_timeout_s)}</stringProp>
+  <stringProp name="resultSetMaxRows"></stringProp>
+  <boolProp name="collectDiagnostics">false</boolProp>
+</JDBCSampler>
+<hashTree>
+<JSR223PostProcessor guiclass="TestBeanGUI" testclass="JSR223PostProcessor" testname="m3-connection-id-post" enabled="true">
+  <stringProp name="scriptLanguage">groovy</stringProp>
+  <stringProp name="parameters">connection-id</stringProp>
+  <stringProp name="filename">counter.groovy</stringProp>
+  <stringProp name="cacheKey">m3-connection-id</stringProp>
+  <stringProp name="script"></stringProp>
+</JSR223PostProcessor>
+<hashTree/>
+</hashTree>
+</hashTree>
+<JSR223Sampler guiclass="TestBeanGUI" testclass="JSR223Sampler" testname="m3-warmup-complete" enabled="true">
+  <stringProp name="scriptLanguage">groovy</stringProp>
+  <stringProp name="parameters">warmup-complete</stringProp>
+  <stringProp name="filename">counter.groovy</stringProp>
+  <stringProp name="cacheKey">m3-warmup-complete</stringProp>
+  <stringProp name="script"></stringProp>
+</JSR223Sampler>
+<hashTree/>
+<IfController guiclass="IfControllerPanel" testclass="IfController" testname="m3-representative" enabled="true">
+  <stringProp name="IfController.condition">${m3_is_representative}</stringProp>
+  <boolProp name="IfController.evaluateAll">false</boolProp>
+  <boolProp name="IfController.useExpression">true</boolProp>
+</IfController>
+<hashTree>
+<IfController guiclass="IfControllerPanel" testclass="IfController" testname="m3-reset-http-target" enabled="true">
+  <stringProp name="IfController.condition">${__P(m3.target.http)}</stringProp>
+  <boolProp name="IfController.evaluateAll">false</boolProp>
+  <boolProp name="IfController.useExpression">true</boolProp>
+</IfController>
+<hashTree>
+<HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="m3-reset-http-put" enabled="true">
+  <boolProp name="HTTPSampler.postBodyRaw">true</boolProp>
+  <elementProp name="HTTPsampler.Arguments" elementType="Arguments">
+    <collectionProp name="Arguments.arguments">
+      <elementProp name="" elementType="HTTPArgument">
+      <boolProp name="HTTPArgument.always_encode">false</boolProp>
+      <stringProp name="Argument.value">{"key":"counter:one","value":0}</stringProp>
+      <stringProp name="Argument.metadata">=</stringProp>
+    </elementProp>
+    </collectionProp>
+  </elementProp>
+  <stringProp name="HTTPSampler.domain">${__P(m3.http.host)}</stringProp>
+  <stringProp name="HTTPSampler.port">${__P(m3.http.port)}</stringProp>
+  <stringProp name="HTTPSampler.protocol">${__P(m3.http.scheme)}</stringProp>
+  <stringProp name="HTTPSampler.contentEncoding">UTF-8</stringProp>
+  <stringProp name="HTTPSampler.path">/kv</stringProp>
+  <stringProp name="HTTPSampler.method">PUT</stringProp>
+  <boolProp name="HTTPSampler.follow_redirects">false</boolProp>
+  <boolProp name="HTTPSampler.auto_redirects">false</boolProp>
+  <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+  <boolProp name="HTTPSampler.DO_MULTIPART_POST">false</boolProp>
+  <stringProp name="HTTPSampler.embedded_url_re"></stringProp>
+  <stringProp name="HTTPSampler.connect_timeout">${__P(m3.http.connect_timeout_ms)}</stringProp>
+  <stringProp name="HTTPSampler.response_timeout">${__P(m3.http.response_timeout_ms)}</stringProp>
+  <stringProp name="HTTPSampler.implementation">HttpClient4</stringProp>
+  <stringProp name="HTTPSampler.monitor">false</stringProp>
+  <stringProp name="HTTPSampler.IPSource"></stringProp>
+</HTTPSamplerProxy>
+<hashTree>
+<JSR223PostProcessor guiclass="TestBeanGUI" testclass="JSR223PostProcessor" testname="m3-reset-http-put-post" enabled="true">
+  <stringProp name="scriptLanguage">groovy</stringProp>
+  <stringProp name="parameters">reset-http-put</stringProp>
+  <stringProp name="filename">counter.groovy</stringProp>
+  <stringProp name="cacheKey">m3-reset-http-put</stringProp>
+  <stringProp name="script"></stringProp>
+</JSR223PostProcessor>
+<hashTree/>
+<HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="JSON Content-Type" enabled="true">
+  <collectionProp name="HeaderManager.headers">
+    <elementProp name="" elementType="Header">
+      <stringProp name="Header.name">Content-Type</stringProp>
+      <stringProp name="Header.value">application/json</stringProp>
+    </elementProp>
+  </collectionProp>
+</HeaderManager>
+<hashTree/>
+</hashTree>
+<HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="m3-reset-http-get" enabled="true">
+  <boolProp name="HTTPSampler.postBodyRaw">false</boolProp>
+  <elementProp name="HTTPsampler.Arguments" elementType="Arguments">
+    <collectionProp name="Arguments.arguments">
+      <elementProp name="key" elementType="HTTPArgument">
+      <boolProp name="HTTPArgument.always_encode">true</boolProp>
+      <stringProp name="Argument.value">counter:one</stringProp>
+      <stringProp name="Argument.metadata">=</stringProp>
+      <boolProp name="HTTPArgument.use_equals">true</boolProp>
+      <stringProp name="Argument.name">key</stringProp>
+    </elementProp>
+    </collectionProp>
+  </elementProp>
+  <stringProp name="HTTPSampler.domain">${__P(m3.http.host)}</stringProp>
+  <stringProp name="HTTPSampler.port">${__P(m3.http.port)}</stringProp>
+  <stringProp name="HTTPSampler.protocol">${__P(m3.http.scheme)}</stringProp>
+  <stringProp name="HTTPSampler.contentEncoding">UTF-8</stringProp>
+  <stringProp name="HTTPSampler.path">/kv</stringProp>
+  <stringProp name="HTTPSampler.method">GET</stringProp>
+  <boolProp name="HTTPSampler.follow_redirects">false</boolProp>
+  <boolProp name="HTTPSampler.auto_redirects">false</boolProp>
+  <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+  <boolProp name="HTTPSampler.DO_MULTIPART_POST">false</boolProp>
+  <stringProp name="HTTPSampler.embedded_url_re"></stringProp>
+  <stringProp name="HTTPSampler.connect_timeout">${__P(m3.http.connect_timeout_ms)}</stringProp>
+  <stringProp name="HTTPSampler.response_timeout">${__P(m3.http.response_timeout_ms)}</stringProp>
+  <stringProp name="HTTPSampler.implementation">HttpClient4</stringProp>
+  <stringProp name="HTTPSampler.monitor">false</stringProp>
+  <stringProp name="HTTPSampler.IPSource"></stringProp>
+</HTTPSamplerProxy>
+<hashTree>
+<JSR223PostProcessor guiclass="TestBeanGUI" testclass="JSR223PostProcessor" testname="m3-reset-http-get-post" enabled="true">
+  <stringProp name="scriptLanguage">groovy</stringProp>
+  <stringProp name="parameters">reset-http-get</stringProp>
+  <stringProp name="filename">counter.groovy</stringProp>
+  <stringProp name="cacheKey">m3-reset-http-get</stringProp>
+  <stringProp name="script"></stringProp>
+</JSR223PostProcessor>
+<hashTree/>
+</hashTree>
+</hashTree>
+<IfController guiclass="IfControllerPanel" testclass="IfController" testname="m3-reset-jdbc-target" enabled="true">
+  <stringProp name="IfController.condition">${__P(m3.target.jdbc)}</stringProp>
+  <boolProp name="IfController.evaluateAll">false</boolProp>
+  <boolProp name="IfController.useExpression">true</boolProp>
+</IfController>
+<hashTree>
+<JDBCSampler guiclass="TestBeanGUI" testclass="JDBCSampler" testname="m3-reset-jdbc-update" enabled="true">
+  <stringProp name="dataSource">m3-mysql</stringProp>
+  <stringProp name="queryType">Prepared Update Statement</stringProp>
+  <stringProp name="query">UPDATE benchmark_counter SET value = 0 WHERE counter_key = ?</stringProp>
+  <stringProp name="queryArguments">counter:one</stringProp>
+  <stringProp name="queryArgumentsTypes">VARBINARY</stringProp>
+  <stringProp name="variableNames"></stringProp>
+  <stringProp name="resultVariable"></stringProp>
+  <stringProp name="queryTimeout">${__P(m3.prep_jdbc_timeout_s)}</stringProp>
+  <stringProp name="resultSetMaxRows"></stringProp>
+  <boolProp name="collectDiagnostics">false</boolProp>
+</JDBCSampler>
+<hashTree>
+<JSR223PostProcessor guiclass="TestBeanGUI" testclass="JSR223PostProcessor" testname="m3-reset-jdbc-update-post" enabled="true">
+  <stringProp name="scriptLanguage">groovy</stringProp>
+  <stringProp name="parameters">reset-jdbc-update</stringProp>
+  <stringProp name="filename">counter.groovy</stringProp>
+  <stringProp name="cacheKey">m3-reset-jdbc-update</stringProp>
+  <stringProp name="script"></stringProp>
+</JSR223PostProcessor>
+<hashTree/>
+</hashTree>
+<JDBCSampler guiclass="TestBeanGUI" testclass="JDBCSampler" testname="m3-reset-jdbc-get" enabled="true">
+  <stringProp name="dataSource">m3-mysql</stringProp>
+  <stringProp name="queryType">Prepared Select Statement</stringProp>
+  <stringProp name="query">SELECT value AS current_value FROM benchmark_counter WHERE counter_key = ?</stringProp>
+  <stringProp name="queryArguments">counter:one</stringProp>
+  <stringProp name="queryArgumentsTypes">VARBINARY</stringProp>
+  <stringProp name="variableNames">m3_final_value</stringProp>
+  <stringProp name="resultVariable"></stringProp>
+  <stringProp name="queryTimeout">${__P(m3.prep_jdbc_timeout_s)}</stringProp>
+  <stringProp name="resultSetMaxRows"></stringProp>
+  <boolProp name="collectDiagnostics">false</boolProp>
+</JDBCSampler>
+<hashTree>
+<JSR223PostProcessor guiclass="TestBeanGUI" testclass="JSR223PostProcessor" testname="m3-reset-jdbc-get-post" enabled="true">
+  <stringProp name="scriptLanguage">groovy</stringProp>
+  <stringProp name="parameters">reset-jdbc-get</stringProp>
+  <stringProp name="filename">counter.groovy</stringProp>
+  <stringProp name="cacheKey">m3-reset-jdbc-get</stringProp>
+  <stringProp name="script"></stringProp>
+</JSR223PostProcessor>
+<hashTree/>
+</hashTree>
+</hashTree>
+</hashTree>
+<JSR223Sampler guiclass="TestBeanGUI" testclass="JSR223Sampler" testname="m3-start-gate" enabled="true">
+  <stringProp name="scriptLanguage">groovy</stringProp>
+  <stringProp name="parameters">start-gate</stringProp>
+  <stringProp name="filename">counter.groovy</stringProp>
+  <stringProp name="cacheKey">m3-start-gate</stringProp>
+  <stringProp name="script"></stringProp>
+</JSR223Sampler>
+<hashTree/>
+<LoopController guiclass="LoopControlPanel" testclass="LoopController" testname="m3-measurement-loop" enabled="true">
+  <boolProp name="LoopController.continue_forever">false</boolProp>
+  <stringProp name="LoopController.loops">${__P(m3.n)}</stringProp>
+</LoopController>
+<hashTree>
+<ThroughputController guiclass="ThroughputControllerGui" testclass="ThroughputController" testname="m3-global-quota" enabled="true">
+  <intProp name="ThroughputController.style">0</intProp>
+  <boolProp name="ThroughputController.perThread">false</boolProp>
+  <stringProp name="ThroughputController.maxThroughput">${__P(m3.n)}</stringProp>
+  <intProp name="ThroughputController.percentThroughput">100</intProp>
+</ThroughputController>
+<hashTree>
+<IfController guiclass="IfControllerPanel" testclass="IfController" testname="m3-measure-http-target" enabled="true">
+  <stringProp name="IfController.condition">${__P(m3.target.http)}</stringProp>
+  <boolProp name="IfController.evaluateAll">false</boolProp>
+  <boolProp name="IfController.useExpression">true</boolProp>
+</IfController>
+<hashTree>
+<HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="m3-http-incr" enabled="true">
+  <boolProp name="HTTPSampler.postBodyRaw">true</boolProp>
+  <elementProp name="HTTPsampler.Arguments" elementType="Arguments">
+    <collectionProp name="Arguments.arguments">
+      <elementProp name="" elementType="HTTPArgument">
+      <boolProp name="HTTPArgument.always_encode">false</boolProp>
+      <stringProp name="Argument.value">{"key":"counter:one","amount":1}</stringProp>
+      <stringProp name="Argument.metadata">=</stringProp>
+    </elementProp>
+    </collectionProp>
+  </elementProp>
+  <stringProp name="HTTPSampler.domain">${__P(m3.http.host)}</stringProp>
+  <stringProp name="HTTPSampler.port">${__P(m3.http.port)}</stringProp>
+  <stringProp name="HTTPSampler.protocol">${__P(m3.http.scheme)}</stringProp>
+  <stringProp name="HTTPSampler.contentEncoding">UTF-8</stringProp>
+  <stringProp name="HTTPSampler.path">/kv/incr</stringProp>
+  <stringProp name="HTTPSampler.method">POST</stringProp>
+  <boolProp name="HTTPSampler.follow_redirects">false</boolProp>
+  <boolProp name="HTTPSampler.auto_redirects">false</boolProp>
+  <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+  <boolProp name="HTTPSampler.DO_MULTIPART_POST">false</boolProp>
+  <stringProp name="HTTPSampler.embedded_url_re"></stringProp>
+  <stringProp name="HTTPSampler.connect_timeout">${__P(m3.http.connect_timeout_ms)}</stringProp>
+  <stringProp name="HTTPSampler.response_timeout">${__P(m3.http.response_timeout_ms)}</stringProp>
+  <stringProp name="HTTPSampler.implementation">HttpClient4</stringProp>
+  <stringProp name="HTTPSampler.monitor">false</stringProp>
+  <stringProp name="HTTPSampler.IPSource"></stringProp>
+</HTTPSamplerProxy>
+<hashTree>
+<JSR223PreProcessor guiclass="TestBeanGUI" testclass="JSR223PreProcessor" testname="m3-http-incr-pre" enabled="true">
+  <stringProp name="scriptLanguage">groovy</stringProp>
+  <stringProp name="parameters">measure-pre</stringProp>
+  <stringProp name="filename">counter.groovy</stringProp>
+  <stringProp name="cacheKey">m3-measure-pre</stringProp>
+  <stringProp name="script"></stringProp>
+</JSR223PreProcessor>
+<hashTree/>
+<JSR223PostProcessor guiclass="TestBeanGUI" testclass="JSR223PostProcessor" testname="m3-http-incr-post" enabled="true">
+  <stringProp name="scriptLanguage">groovy</stringProp>
+  <stringProp name="parameters">measure-post-http</stringProp>
+  <stringProp name="filename">counter.groovy</stringProp>
+  <stringProp name="cacheKey">m3-measure-post-http</stringProp>
+  <stringProp name="script"></stringProp>
+</JSR223PostProcessor>
+<hashTree/>
+<HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="JSON Content-Type" enabled="true">
+  <collectionProp name="HeaderManager.headers">
+    <elementProp name="" elementType="Header">
+      <stringProp name="Header.name">Content-Type</stringProp>
+      <stringProp name="Header.value">application/json</stringProp>
+    </elementProp>
+  </collectionProp>
+</HeaderManager>
+<hashTree/>
+</hashTree>
+</hashTree>
+<IfController guiclass="IfControllerPanel" testclass="IfController" testname="m3-measure-jdbc-target" enabled="true">
+  <stringProp name="IfController.condition">${__P(m3.target.jdbc)}</stringProp>
+  <boolProp name="IfController.evaluateAll">false</boolProp>
+  <boolProp name="IfController.useExpression">true</boolProp>
+</IfController>
+<hashTree>
+<JDBCSampler guiclass="TestBeanGUI" testclass="JDBCSampler" testname="m3-jdbc-incr" enabled="true">
+  <stringProp name="dataSource">m3-mysql</stringProp>
+  <stringProp name="queryType">Prepared Update Statement</stringProp>
+  <stringProp name="query">UPDATE benchmark_counter SET value = value + 1 WHERE counter_key = ?</stringProp>
+  <stringProp name="queryArguments">counter:one</stringProp>
+  <stringProp name="queryArgumentsTypes">VARBINARY</stringProp>
+  <stringProp name="variableNames"></stringProp>
+  <stringProp name="resultVariable"></stringProp>
+  <stringProp name="queryTimeout">${__P(m3.jdbc.query_timeout_s)}</stringProp>
+  <stringProp name="resultSetMaxRows"></stringProp>
+  <boolProp name="collectDiagnostics">false</boolProp>
+</JDBCSampler>
+<hashTree>
+<JSR223PreProcessor guiclass="TestBeanGUI" testclass="JSR223PreProcessor" testname="m3-jdbc-incr-pre" enabled="true">
+  <stringProp name="scriptLanguage">groovy</stringProp>
+  <stringProp name="parameters">measure-pre</stringProp>
+  <stringProp name="filename">counter.groovy</stringProp>
+  <stringProp name="cacheKey">m3-measure-pre</stringProp>
+  <stringProp name="script"></stringProp>
+</JSR223PreProcessor>
+<hashTree/>
+<JSR223PostProcessor guiclass="TestBeanGUI" testclass="JSR223PostProcessor" testname="m3-jdbc-incr-post" enabled="true">
+  <stringProp name="scriptLanguage">groovy</stringProp>
+  <stringProp name="parameters">measure-post-jdbc</stringProp>
+  <stringProp name="filename">counter.groovy</stringProp>
+  <stringProp name="cacheKey">m3-measure-post-jdbc</stringProp>
+  <stringProp name="script"></stringProp>
+</JSR223PostProcessor>
+<hashTree/>
+</hashTree>
+</hashTree>
+</hashTree>
+</hashTree>
+<JSR223Sampler guiclass="TestBeanGUI" testclass="JSR223Sampler" testname="m3-wait-complete" enabled="true">
+  <stringProp name="scriptLanguage">groovy</stringProp>
+  <stringProp name="parameters">wait-complete</stringProp>
+  <stringProp name="filename">counter.groovy</stringProp>
+  <stringProp name="cacheKey">m3-wait-complete</stringProp>
+  <stringProp name="script"></stringProp>
+</JSR223Sampler>
+<hashTree/>
+<IfController guiclass="IfControllerPanel" testclass="IfController" testname="m3-after-allowed" enabled="true">
+  <stringProp name="IfController.condition">${m3_after_allowed}</stringProp>
+  <boolProp name="IfController.evaluateAll">false</boolProp>
+  <boolProp name="IfController.useExpression">true</boolProp>
+</IfController>
+<hashTree>
+<IfController guiclass="IfControllerPanel" testclass="IfController" testname="m3-test-after-probe" enabled="true">
+  <stringProp name="IfController.condition">${__P(m3.test.after_probe,false)}</stringProp>
+  <boolProp name="IfController.evaluateAll">false</boolProp>
+  <boolProp name="IfController.useExpression">true</boolProp>
+</IfController>
+<hashTree>
+<JSR223Sampler guiclass="TestBeanGUI" testclass="JSR223Sampler" testname="m3-after-probe" enabled="true">
+  <stringProp name="scriptLanguage">groovy</stringProp>
+  <stringProp name="parameters">after-probe</stringProp>
+  <stringProp name="filename">counter.groovy</stringProp>
+  <stringProp name="cacheKey">m3-after-probe</stringProp>
+  <stringProp name="script"></stringProp>
+</JSR223Sampler>
+<hashTree/>
+</hashTree>
+<IfController guiclass="IfControllerPanel" testclass="IfController" testname="m3-connection-after-target" enabled="true">
+  <stringProp name="IfController.condition">${__P(m3.target.jdbc)}</stringProp>
+  <boolProp name="IfController.evaluateAll">false</boolProp>
+  <boolProp name="IfController.useExpression">true</boolProp>
+</IfController>
+<hashTree>
+<JDBCSampler guiclass="TestBeanGUI" testclass="JDBCSampler" testname="m3-connection-id-after" enabled="true">
+  <stringProp name="dataSource">m3-mysql</stringProp>
+  <stringProp name="queryType">Select Statement</stringProp>
+  <stringProp name="query">SELECT CONNECTION_ID() AS connection_id</stringProp>
+  <stringProp name="queryArguments"></stringProp>
+  <stringProp name="queryArgumentsTypes"></stringProp>
+  <stringProp name="variableNames">m3_connection_id_after</stringProp>
+  <stringProp name="resultVariable"></stringProp>
+  <stringProp name="queryTimeout">${__P(m3.finish_jdbc_timeout_s)}</stringProp>
+  <stringProp name="resultSetMaxRows"></stringProp>
+  <boolProp name="collectDiagnostics">false</boolProp>
+</JDBCSampler>
+<hashTree>
+<JSR223PostProcessor guiclass="TestBeanGUI" testclass="JSR223PostProcessor" testname="m3-connection-id-after-post" enabled="true">
+  <stringProp name="scriptLanguage">groovy</stringProp>
+  <stringProp name="parameters">connection-id-after</stringProp>
+  <stringProp name="filename">counter.groovy</stringProp>
+  <stringProp name="cacheKey">m3-connection-id-after</stringProp>
+  <stringProp name="script"></stringProp>
+</JSR223PostProcessor>
+<hashTree/>
+</hashTree>
+</hashTree>
+</hashTree>
+</hashTree>
+<PostThreadGroup guiclass="PostThreadGroupGui" testclass="PostThreadGroup" testname="m3-tearDown" enabled="true">
+  <stringProp name="ThreadGroup.on_sample_error">continue</stringProp>
+  <elementProp name="ThreadGroup.main_controller" elementType="LoopController" guiclass="LoopControlPanel" testclass="LoopController" testname="Loop Controller" enabled="true">
+    <boolProp name="LoopController.continue_forever">false</boolProp>
+    <stringProp name="LoopController.loops">1</stringProp>
+  </elementProp>
+  <stringProp name="ThreadGroup.num_threads">1</stringProp>
+  <stringProp name="ThreadGroup.ramp_time">0</stringProp>
+  <longProp name="ThreadGroup.start_time">0</longProp>
+  <longProp name="ThreadGroup.end_time">0</longProp>
+  <boolProp name="ThreadGroup.scheduler">false</boolProp>
+  <stringProp name="ThreadGroup.duration"></stringProp>
+  <stringProp name="ThreadGroup.delay"></stringProp>
+  <boolProp name="ThreadGroup.same_user_on_next_iteration">false</boolProp>
+</PostThreadGroup>
+<hashTree>
+<JSR223Sampler guiclass="TestBeanGUI" testclass="JSR223Sampler" testname="m3-teardown-prepare" enabled="true">
+  <stringProp name="scriptLanguage">groovy</stringProp>
+  <stringProp name="parameters">teardown-prepare</stringProp>
+  <stringProp name="filename">counter.groovy</stringProp>
+  <stringProp name="cacheKey">m3-teardown-prepare</stringProp>
+  <stringProp name="script"></stringProp>
+</JSR223Sampler>
+<hashTree/>
+<IfController guiclass="IfControllerPanel" testclass="IfController" testname="m3-do-final-read" enabled="true">
+  <stringProp name="IfController.condition">${m3_do_final_read}</stringProp>
+  <boolProp name="IfController.evaluateAll">false</boolProp>
+  <boolProp name="IfController.useExpression">true</boolProp>
+</IfController>
+<hashTree>
+<IfController guiclass="IfControllerPanel" testclass="IfController" testname="m3-final-http-target" enabled="true">
+  <stringProp name="IfController.condition">${__P(m3.target.http)}</stringProp>
+  <boolProp name="IfController.evaluateAll">false</boolProp>
+  <boolProp name="IfController.useExpression">true</boolProp>
+</IfController>
+<hashTree>
+<HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="m3-final-http-read" enabled="true">
+  <boolProp name="HTTPSampler.postBodyRaw">false</boolProp>
+  <elementProp name="HTTPsampler.Arguments" elementType="Arguments">
+    <collectionProp name="Arguments.arguments">
+      <elementProp name="key" elementType="HTTPArgument">
+      <boolProp name="HTTPArgument.always_encode">true</boolProp>
+      <stringProp name="Argument.value">counter:one</stringProp>
+      <stringProp name="Argument.metadata">=</stringProp>
+      <boolProp name="HTTPArgument.use_equals">true</boolProp>
+      <stringProp name="Argument.name">key</stringProp>
+    </elementProp>
+    </collectionProp>
+  </elementProp>
+  <stringProp name="HTTPSampler.domain">${__P(m3.http.host)}</stringProp>
+  <stringProp name="HTTPSampler.port">${__P(m3.http.port)}</stringProp>
+  <stringProp name="HTTPSampler.protocol">${__P(m3.http.scheme)}</stringProp>
+  <stringProp name="HTTPSampler.contentEncoding">UTF-8</stringProp>
+  <stringProp name="HTTPSampler.path">/kv</stringProp>
+  <stringProp name="HTTPSampler.method">GET</stringProp>
+  <boolProp name="HTTPSampler.follow_redirects">false</boolProp>
+  <boolProp name="HTTPSampler.auto_redirects">false</boolProp>
+  <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+  <boolProp name="HTTPSampler.DO_MULTIPART_POST">false</boolProp>
+  <stringProp name="HTTPSampler.embedded_url_re"></stringProp>
+  <stringProp name="HTTPSampler.connect_timeout">${__P(m3.http.connect_timeout_ms)}</stringProp>
+  <stringProp name="HTTPSampler.response_timeout">${__P(m3.http.response_timeout_ms)}</stringProp>
+  <stringProp name="HTTPSampler.implementation">HttpClient4</stringProp>
+  <stringProp name="HTTPSampler.monitor">false</stringProp>
+  <stringProp name="HTTPSampler.IPSource"></stringProp>
+</HTTPSamplerProxy>
+<hashTree>
+<JSR223PostProcessor guiclass="TestBeanGUI" testclass="JSR223PostProcessor" testname="m3-final-http-read-post" enabled="true">
+  <stringProp name="scriptLanguage">groovy</stringProp>
+  <stringProp name="parameters">final-http</stringProp>
+  <stringProp name="filename">counter.groovy</stringProp>
+  <stringProp name="cacheKey">m3-final-http</stringProp>
+  <stringProp name="script"></stringProp>
+</JSR223PostProcessor>
+<hashTree/>
+</hashTree>
+</hashTree>
+<IfController guiclass="IfControllerPanel" testclass="IfController" testname="m3-final-jdbc-target" enabled="true">
+  <stringProp name="IfController.condition">${__P(m3.target.jdbc)}</stringProp>
+  <boolProp name="IfController.evaluateAll">false</boolProp>
+  <boolProp name="IfController.useExpression">true</boolProp>
+</IfController>
+<hashTree>
+<JDBCSampler guiclass="TestBeanGUI" testclass="JDBCSampler" testname="m3-final-jdbc-read" enabled="true">
+  <stringProp name="dataSource">m3-mysql</stringProp>
+  <stringProp name="queryType">Prepared Select Statement</stringProp>
+  <stringProp name="query">SELECT value AS current_value FROM benchmark_counter WHERE counter_key = ?</stringProp>
+  <stringProp name="queryArguments">counter:one</stringProp>
+  <stringProp name="queryArgumentsTypes">VARBINARY</stringProp>
+  <stringProp name="variableNames">m3_final_value</stringProp>
+  <stringProp name="resultVariable"></stringProp>
+  <stringProp name="queryTimeout">${__P(m3.finish_jdbc_timeout_s)}</stringProp>
+  <stringProp name="resultSetMaxRows"></stringProp>
+  <boolProp name="collectDiagnostics">false</boolProp>
+</JDBCSampler>
+<hashTree>
+<JSR223PostProcessor guiclass="TestBeanGUI" testclass="JSR223PostProcessor" testname="m3-final-jdbc-read-post" enabled="true">
+  <stringProp name="scriptLanguage">groovy</stringProp>
+  <stringProp name="parameters">final-jdbc</stringProp>
+  <stringProp name="filename">counter.groovy</stringProp>
+  <stringProp name="cacheKey">m3-final-jdbc</stringProp>
+  <stringProp name="script"></stringProp>
+</JSR223PostProcessor>
+<hashTree/>
+</hashTree>
+</hashTree>
+</hashTree>
+<JSR223Sampler guiclass="TestBeanGUI" testclass="JSR223Sampler" testname="m3-teardown-write" enabled="true">
+  <stringProp name="scriptLanguage">groovy</stringProp>
+  <stringProp name="parameters">teardown-write</stringProp>
+  <stringProp name="filename">counter.groovy</stringProp>
+  <stringProp name="cacheKey">m3-teardown-write</stringProp>
+  <stringProp name="script"></stringProp>
+</JSR223Sampler>
+<hashTree/>
+</hashTree>
+</hashTree>
+  </hashTree>
+</jmeterTestPlan>

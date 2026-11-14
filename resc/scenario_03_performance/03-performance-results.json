@@ -1,0 +1,115 @@
+{
+  "status": "complete",
+  "date": "2026-11-14",
+  "campaign_id": "20261114T020949",
+  "analysis_owner": "main",
+  "implementation_model": "commandcode/deepseek/deepseek-v4.1-flash",
+  "conditions": {
+    "requests_per_run": 10000,
+    "concurrencies": [1, 10, 50, 100],
+    "rounds_per_target_and_concurrency": 5,
+    "warmup_requests_per_run": 100,
+    "request_timeout_seconds": 5,
+    "total_limit_seconds": 360,
+    "preparation_limit_seconds": 30,
+    "finish_limit_seconds": 15,
+    "order": "홀수 회차 HTTP 다음 JDBC, 짝수 회차 JDBC 다음 HTTP",
+    "latency": "성공 호출만 사용. 클라이언트 고해상도 경계로 회차별 백분위수를 계산한 뒤 5회의 중앙값·최솟값·최댓값 집계",
+    "comparison_scope": "현재 구성의 HTTP Mini Redis와 직접 JDBC MySQL 비교. 동일 내구성 보장 비교는 아님"
+  },
+  "verification": {
+    "existing_functional_tests_passed": 508,
+    "measurement_tests_passed": 83,
+    "measurement_tests_skipped": 0,
+    "s301_http_success": 100,
+    "s301_jdbc_success": 100,
+    "final_pilot_runs_passed": 8,
+    "campaign_runs_passed": 40,
+    "campaign_attempts": 400000,
+    "campaign_successes": 400000,
+    "campaign_failures": 0,
+    "campaign_timeouts": 0,
+    "campaign_unfinished": 0,
+    "campaign_unknown": 0,
+    "all_final_counter_values": 10000,
+    "jdbc_connection_identity_stable_all_runs": true,
+    "source_snapshot_matches_verified_repository_files": true
+  },
+  "groups": [
+    {
+      "target": "http", "concurrency": 1, "rounds": 5,
+      "throughput_per_second": {"median": 1593.581698002318, "min": 1570.6671676546243, "max": 1610.096952768908},
+      "p50_ms": {"median": 0.466612, "min": 0.463051, "max": 0.471362},
+      "p95_ms": {"median": 0.9594043999999992, "min": 0.9284750500000001, "max": 0.972406},
+      "p99_ms": {"median": 1.4961158600000022, "min": 1.4295318700000001, "max": 1.54826188}
+    },
+    {
+      "target": "jdbc", "concurrency": 1, "rounds": 5,
+      "throughput_per_second": {"median": 66.68416539454354, "min": 66.50629320987987, "max": 67.05831711578546},
+      "p50_ms": {"median": 15.899848, "min": 15.6997865, "max": 15.930124},
+      "p95_ms": {"median": 18.08633735, "min": 17.99259875, "max": 18.419080199999996},
+      "p99_ms": {"median": 24.013668320000008, "min": 23.24121612000002, "max": 24.95179766000001}
+    },
+    {
+      "target": "http", "concurrency": 10, "rounds": 5,
+      "throughput_per_second": {"median": 2582.4650907508135, "min": 2552.758127927761, "max": 2603.054050865946},
+      "p50_ms": {"median": 3.412328, "min": 3.360086, "max": 3.474067},
+      "p95_ms": {"median": 5.834679449999997, "min": 5.638652699999998, "max": 6.043464349999999},
+      "p99_ms": {"median": 8.235249240000002, "min": 7.889686870000001, "max": 8.54867748}
+    },
+    {
+      "target": "jdbc", "concurrency": 10, "rounds": 5,
+      "throughput_per_second": {"median": 82.64924847494667, "min": 81.76615926481468, "max": 82.84010991298418},
+      "p50_ms": {"median": 118.8099045, "min": 118.474514, "max": 119.416038},
+      "p95_ms": {"median": 134.81898215, "min": 133.38798764999999, "max": 139.04415864999996},
+      "p99_ms": {"median": 157.48781497000004, "min": 154.65527510000004, "max": 163.24232252000002}
+    },
+    {
+      "target": "http", "concurrency": 50, "rounds": 5,
+      "throughput_per_second": {"median": 2544.7824789511346, "min": 2488.6575109894234, "max": 2564.1432629734013},
+      "p50_ms": {"median": 18.286937, "min": 18.1705805, "max": 18.708431},
+      "p95_ms": {"median": 26.5459194, "min": 25.55154799999999, "max": 28.167901099999995},
+      "p99_ms": {"median": 36.73798721000001, "min": 33.63505772000002, "max": 38.70870449}
+    },
+    {
+      "target": "jdbc", "concurrency": 50, "rounds": 5,
+      "throughput_per_second": {"median": 82.46491811587806, "min": 81.72514990210999, "max": 82.55135408421206},
+      "p50_ms": {"median": 601.118609, "min": 598.6763265, "max": 607.0902229999999},
+      "p95_ms": {"median": 658.02233655, "min": 642.3817640999999, "max": 678.1677684},
+      "p99_ms": {"median": 713.3136241200002, "min": 698.05026412, "max": 721.0728420300001}
+    },
+    {
+      "target": "http", "concurrency": 100, "rounds": 5,
+      "throughput_per_second": {"median": 2482.9094489796653, "min": 2472.538665859452, "max": 2490.5960652830627},
+      "p50_ms": {"median": 37.716062, "min": 37.1135035, "max": 38.0538515},
+      "p95_ms": {"median": 52.65068999999999, "min": 50.80293919999999, "max": 54.748012},
+      "p99_ms": {"median": 74.21268707000003, "min": 68.42922027000006, "max": 84.74782524}
+    },
+    {
+      "target": "jdbc", "concurrency": 100, "rounds": 5,
+      "throughput_per_second": {"median": 82.22622789138744, "min": 81.21264107295008, "max": 82.55419239866943},
+      "p50_ms": {"median": 1208.9027355, "min": 1201.7664375, "max": 1214.5192905},
+      "p95_ms": {"median": 1322.69821775, "min": 1289.60419835, "max": 1354.6735371},
+      "p99_ms": {"median": 1359.82175261, "min": 1340.09278041, "max": 1415.3369618000002}
+    }
+  ],
+  "source_sha256": {
+    "counter.jmx": "778a7e2ffc958f064e397fc51256920f8197076cb67276e85ad37be17e8d8ddb",
+    "counter.groovy": "4e781d02d41d3b313cf71f3e80e651fab38e0d0b60bcd9b469c23745e5b370e8",
+    "jmeter.properties": "7e5d7ab40f4ee8240adface9cd1a2888cc0161cc48fe05528e8d231d20575acc",
+    "mysql_setup.sql": "24e247ffa4fe494ce12a1dc05ef4aa6c1803019be11e9be6556b323f0d3d9c96",
+    "run_performance.py": "ffd1c7f9bff521b1c222b9c7bf7bf29ac6dba9c11f53c2d8ab089545d86b6c70",
+    "test_measurement_contract.py": "7daff143d10b17e0199acd471273470024077d78f80899acf15f5f85458f507f"
+  },
+  "raw_results": "/tmp/opencode/m3-final-results",
+  "local_evidence_archive": "tests/scenario_03_performance/results/final-20261114.tar.gz",
+  "limitations": [
+    "공유 잠금·기록·감시 예약 등 계측 자체의 처리량·지연 영향은 미검증. 처리량 정체를 서버 포화로 확정하지 않음.",
+    "원자료 재검산은 같은 검산 코드의 재실행이며 별도 도구를 통한 독립 측정이 아님. 후속 검토는 이슈 #5로 보류.",
+    "장애 복구와 디스크 내구성 보장은 동등하지 않음.",
+    "MySQL은 log_bin=1, sync_binlog=1, innodb_flush_log_at_trx_commit=1 설정을 사용함.",
+    "Mini Redis HTTP 개발 서버는 순차 처리하며 연결을 닫음.",
+    "5회 범위는 신뢰구간이나 통계적 유의성의 증명이 아님.",
+    "서버 내부 구간 시간과 디스크 기록에 기인하는 비중은 완전히 측정하지 않음."
+  ]
+}

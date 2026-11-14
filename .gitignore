@@ -13,3 +13,6 @@ __pycache__/
 
 # Logs
 *.log
+
+# Local performance evidence (summaries stay in resc/)
+tests/scenario_03_performance/results/
