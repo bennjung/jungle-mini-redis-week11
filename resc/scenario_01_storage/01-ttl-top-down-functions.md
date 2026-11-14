@@ -4,7 +4,7 @@
 
 - 기준: [01 TTL 계약](01-ttl-contract.md), [01 TTL 테스트 계약](01-ttl-test-cases.md), [REST API 9절](../../rest-api.md), [04 날씨 TTL/LDC 결정 로그](../scenario_04_response_cache/04-weather-ttl-decision-log.md).
 - 이 문서는 TTL 기능을 기존 `app.py` → `storage.py` 흐름에 배치하고, 테스트 작성부터 구현까지 3인 분업 경계를 정하는 설계 초안이다.
-- `[확정]` 2026-11-14 구현 범위: 01 TTL 전체(저장소 코어·active tick·HTTP 표면·`incr`/`decr` lazy)와 04 날씨 소비자 테스트(T1-21)까지를 한 조각으로 구현한다. 타이머 task와 T1-19는 후속 timer 브랜치에서 한다. 03 성능 재측정·대량 무효화·원본 실패 응답은 제외한다.
+- `[확정]` 2026-11-14 구현 범위: 01 TTL 전체(저장소 코어·active tick·HTTP 표면·`incr`/`decr` lazy)와 04 날씨 소비자 테스트(T1-21)까지를 한 조각으로 구현한다. 타이머 task와 T1-19는 후속 timer 브랜치에서 한다. 03 성능 재측정·대량 무효화는 제외하고, 원본 API 실패 응답은 MiniRedis 범위가 아니므로 다루지 않는다.
 - 함수 이름·인자·내부 helper 이름은 `[제안]`이다. 테스트 코드 작성 전에 이 계약을 동결한다.
 - `[미정]` 항목은 구현으로 확정하지 않는다. 담당 범위의 테스트를 작성하기 전에 사용자 확인을 받는다.
 - 새 계층·큐·잠금·별도 저장소를 만들지 않는다. 기존 `create_app(storage)`와 단일 `MiniRedis` 인스턴스, 단일 이벤트 루프·`uvicorn workers=1` 서버를 유지한다.
@@ -288,7 +288,7 @@ def _active_expire_cycle(self, now_ms):
 - **수정 가능:** `app.py`의 TTL 요청 처리, `test_ttl_http.py`, `test_weather_cache.py`.
 - **필수:** 본문 구조·필수 필드 검사, 저장소 호출 한 번, `INVALID_INPUT` → 400, 정상 → 200. `PUT /kv`의 `ttl` 생략·null을 `None`으로 전달.
 - **금지:** `storage.py` 수정, TTL 타입·범위 판정, 저장 상태 사전 조회, TTL 계산, `/weather` 엔드포인트 추가, 별도 날씨 앱 프로세스.
-- **독립 검증:** T1-20은 실제 `MiniRedis` 연결 HTTP, T1-21은 KV API + 가짜 원본이다. 가짜 원본 실패 동작은 `[미정]`이므로 실패 주입 테스트를 먼저 확정하지 않는다.
+- **독립 검증:** T1-20은 실제 `MiniRedis` 연결 HTTP, T1-21은 KV API + 가짜 원본이다. 원본 API 실패는 MiniRedis 계약 범위가 아니므로 실패 주입 테스트를 만들지 않는다.
 
 ### B. TTL 코어
 
@@ -347,7 +347,7 @@ def _active_expire_cycle(self, now_ms):
 - `[제안]` 테스트 파일 분담: `test_ttl_storage.py`(B), `test_ttl_active.py`(C), `test_ttl_http.py`·`test_weather_cache.py`(A). 타이머 task 시험은 후속 `test_ttl_timer.py`(A).
 - `[확정]` `incr`·`decr`는 lazy 만료 검사를 하고, 만료된 키는 `NOT_FOUND`, 살아 있는 키의 TTL은 유지한다(T1-23).
 - `[확정]` `POST /kv/expire`·`POST /kv/persist`는 계약 필드 외 추가 필드를 무시한다. `PUT /kv`와 같고, `incr`/`decr`의 거절 규칙과 구분한다.
-- `[미정]` 원본 실패·MiniRedis 실패 시 날씨 소비자 응답.
+- `[확정]` 원본 API 실패는 MiniRedis 계약 범위가 아니다. 소비자 책임이며 이 테스트 범위에 넣지 않는다.
 
 ## 9. 이 분업이 만족해야 하는 조건
 
