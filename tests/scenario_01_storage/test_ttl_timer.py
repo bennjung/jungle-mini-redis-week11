@@ -7,10 +7,12 @@
 
 import asyncio
 import logging
+from unittest.mock import Mock
 
 import pytest
+from fastapi.testclient import TestClient
 
-from app import _timer_loop
+from app import _timer_loop, create_app
 from tests.scenario_01_storage.ttl_clock_helpers import FakeClock
 from tests.scenario_01_storage.ttl_state_helpers import (
     assert_ttl_invariants,
@@ -104,3 +106,25 @@ def test_timer_stops_after_tick_exception(caplog):
 
     assert ticks == [1]
     assert "TTL active cleanup failed" in caplog.text
+
+
+def test_lifespan_starts_and_cancels_timer(monkeypatch):
+    """앱 수명 동안 타이머 task를 만들고, 종료 시 취소·대기한다."""
+    started = []
+    cancelled = []
+
+    async def fake_timer(storage, interval=0.1, sleep=asyncio.sleep):
+        started.append(storage)
+        try:
+            await asyncio.sleep(3600)
+        except asyncio.CancelledError:
+            cancelled.append(True)
+            raise
+
+    monkeypatch.setattr("app._timer_loop", fake_timer)
+    storage = Mock()
+
+    with TestClient(create_app(storage)):
+        assert len(started) == 1
+
+    assert cancelled == [True]
