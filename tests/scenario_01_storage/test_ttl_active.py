@@ -1,11 +1,16 @@
-"""T1-14~18, T1-25: TTL active 만료 tick. tick 함수를 직접 호출하고 실제 시간을 기다리지 않는다.
+"""T1-14~18, T1-25~27: TTL active 만료 tick. tick 함수를 직접 호출하고 실제 시간을 기다리지 않는다.
 
 대상: MiniRedis._maybe_active_expire / MiniRedis._active_expire_cycle
 계약: resc/scenario_01_storage/01-ttl-test-cases.md, 01-ttl-c-active-contract.md
 실행: .venv/bin/python -m pytest tests/scenario_01_storage/test_ttl_active.py -q
 """
 
-from tests.scenario_01_storage.ttl_clock_helpers import FakeClock, FirstKSampler
+from tests.scenario_01_storage.ttl_clock_helpers import (
+    FakeClock,
+    FirstKSampler,
+    FixedMonotonic,
+    StepMonotonic,
+)
 from tests.scenario_01_storage.ttl_state_helpers import (
     assert_ttl_invariants,
     ttl_snapshot,
@@ -14,12 +19,16 @@ from tests.scenario_01_storage.ttl_state_helpers import (
 TTL_MS = 1_000
 
 
-def build_store(sampler):
-    """가짜 시계와 주입한 표본 선택기를 가진 새 저장소를 만든다."""
+def build_store(sampler, monotonic=None):
+    """가짜 벽시계·표본 선택기·시간 예산 시계를 가진 새 저장소를 만든다."""
     clock = FakeClock()
     from storage import MiniRedis
 
-    return MiniRedis(clock=clock, sampler=sampler), clock
+    return MiniRedis(
+        clock=clock,
+        sampler=sampler,
+        monotonic=FixedMonotonic() if monotonic is None else monotonic,
+    ), clock
 
 
 def prepare_ttl_keys(store, count, prefix, ttl=TTL_MS):
@@ -167,4 +176,40 @@ def test_t1_25_empty_ttl_set_tick_does_not_sample():
 
     assert sampler.calls == []
     assert_alive(store, ["plain:keep"])
+    assert_ttl_invariants(store)
+
+
+def test_t1_26_time_budget_stops_cycles():
+    """T1-26: 1ms 예산과 0.2ms 단계 시계에서 5회 cycle 후 멈춘다."""
+    sampler = FirstKSampler()
+    store, clock = build_store(
+        sampler, monotonic=StepMonotonic(step_s=0.0002)
+    )
+    prepare_ttl_keys(store, 200, "ttl")
+    clock.advance(TTL_MS)
+
+    store._maybe_active_expire()
+
+    # cycle 1~5: 각 20개 제거, 5번째 뒤 누적 0.001s 도달로 중단.
+    assert [len(sample) for sample in sampler.calls] == [20, 20, 20, 20, 20]
+    expires, ttl_keys, _ = ttl_snapshot(store)
+    assert len(expires) == 100
+    assert set(expires) == set(ttl_keys)
+    assert len(store._data) == 100
+    assert_ttl_invariants(store)
+
+
+def test_t1_27_hard_cap_stops_cycles():
+    """T1-27: 시간 예산이 남아도 50 cycles에서 중단한다."""
+    sampler = FirstKSampler()
+    store, clock = build_store(sampler, monotonic=FixedMonotonic())
+    prepare_ttl_keys(store, 2_000, "ttl")
+    clock.advance(TTL_MS)
+
+    store._maybe_active_expire()
+
+    assert len(sampler.calls) == 50
+    assert all(len(sample) == 20 for sample in sampler.calls)
+    assert len(store._expires) == 1_000
+    assert len(store._data) == 1_000
     assert_ttl_invariants(store)

@@ -1,7 +1,7 @@
-"""TTL active tick 테스트가 쓰는 가짜 벽시계와 고정 표본 선택기.
+"""TTL active tick 테스트가 쓰는 가짜 시계·표본 선택기·시간 예산 시계.
 
 계약: resc/scenario_01_storage/01-ttl-test-cases.md 공통 절차, 01-ttl-c-active-contract.md.
-실제 시간을 기다리지 않고 tick의 시점과 표본을 고정한다.
+실제 시간을 기다리지 않고 tick의 시점, 표본, 시간 예산을 고정한다.
 """
 
 BASE_MS = 1_700_000_000_000
@@ -34,3 +34,26 @@ class FirstKSampler:
         sample = list(keys[:k])
         self.calls.append(sample)
         return sample
+
+
+class FixedMonotonic:
+    """항상 같은 초 단위 시간을 돌려주는 monotonic 시계. 예산이 소진되지 않는다."""
+
+    def __init__(self, now=0.0):
+        self._now = now
+
+    def __call__(self):
+        return self._now
+
+
+class StepMonotonic:
+    """호출될 때마다 step_s초 진행하는 monotonic 시계. 예산 소진 시점을 고정한다."""
+
+    def __init__(self, step_s=0.0002, start_s=0.0):
+        self._now = start_s
+        self._step = step_s
+
+    def __call__(self):
+        value = self._now
+        self._now += self._step
+        return value

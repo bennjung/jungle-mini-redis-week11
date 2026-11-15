@@ -3,7 +3,7 @@
 ## 기준과 상태
 
 - 기준: [TTL 계약](01-ttl-contract.md), [TTL 테스트 계약](01-ttl-test-cases.md), [탑다운 분업](01-ttl-top-down-functions.md).
-- 2026-11-14 동결. 변경은 계약 수정과 사용자 확인을 거친다.
+- 2026-11-14 동결. 2026-11-15 개정: active 시간 예산용 `monotonic` 주입 추가. 변경은 계약 수정과 사용자 확인을 거친다.
 - 이 문서는 B의 작업 범위만 담는다. HTTP 표면은 A, active tick은 C의 문서를 따른다.
 
 ## 담당 범위
@@ -30,10 +30,11 @@
 
 ## 생성자·시계
 
-- `MiniRedis(clock=None, sampler=None)`로 생성한다. 기존 `MiniRedis()` 호출과 호환된다.
+- `MiniRedis(clock=None, sampler=None, monotonic=None)`로 생성한다. 기존 `MiniRedis()` 호출과 호환된다.
 - `_clock()`은 정수 epoch ms를 반환한다. `None`이면 실제 벽시계를 쓴다.
 - `_sampler(keys, k)`는 C가 쓰는 표본 선택기다. 새 리스트를 반환해야 하며 기본값은 `random.sample`이다.
-- 필드: `_data`, `_expires`, `_ttl_keys`, `_ttl_pos`, `_clock`, `_sampler`.
+- `_monotonic()`은 C의 active 시간 예산이 쓰는 초 단위 단조 시간이다. `None`이면 `time.monotonic`을 쓴다.
+- 필드: `_data`, `_expires`, `_ttl_keys`, `_ttl_pos`, `_clock`, `_sampler`, `_monotonic`.
 
 ## 내부 helper
 

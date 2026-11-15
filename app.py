@@ -25,6 +25,9 @@ CONDITION_FIELD = {"incr": "maximum", "decr": "minimum"}
 
 _INVALID_BODY = object()
 
+# tick 연속 실패가 이 횟수에 도달하면 active 정리를 멈춘다.
+TTL_MAX_CONSECUTIVE_FAILURES = 5
+
 
 async def _json_body(request):
     """JSON 본문을 해석한다. 형식 오류는 저장소 호출 없이 거절한다."""
@@ -35,14 +38,27 @@ async def _json_body(request):
 
 
 async def _timer_loop(storage, interval=0.1, sleep=asyncio.sleep):
-    """lifespan이 소유하는 100ms 주기 tick. sleep을 주입해 테스트에서 주기를 제어한다."""
+    """lifespan이 소유하는 100ms 주기 tick. tick 예외는 backoff 후 재시도한다."""
+    failures = 0
     while True:
-        await sleep(interval)
+        delay = interval if failures == 0 else min(interval * 2 ** failures, 5.0)
+        await sleep(delay)
         try:
             storage._maybe_active_expire()
+            failures = 0
         except Exception:
-            logger.exception("TTL active cleanup failed; timer stopped")
-            return
+            failures += 1
+            logger.exception(
+                "TTL active cleanup failed (%d/%d)",
+                failures,
+                TTL_MAX_CONSECUTIVE_FAILURES,
+            )
+            if failures >= TTL_MAX_CONSECUTIVE_FAILURES:
+                logger.error(
+                    "TTL active cleanup stopped after %d consecutive failures",
+                    failures,
+                )
+                return
 
 
 def create_app(storage):

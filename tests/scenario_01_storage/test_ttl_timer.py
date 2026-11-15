@@ -1,5 +1,6 @@
-"""T1-19: lifespan 타이머 task. 가짜 sleep으로 tick 횟수를 제어하고 실제 100ms를 기다리지 않는다.
+"""T1-19·28·29: lifespan 타이머 task와 tick 예외 재시도.
 
+가짜 sleep으로 tick 횟수·backoff 간격을 제어하고 실제 100ms를 기다리지 않는다.
 대상: app._timer_loop
 계약: resc/scenario_01_storage/01-ttl-c-active-contract.md 실행 구조
 실행: .venv/bin/python -m pytest tests/scenario_01_storage/test_ttl_timer.py -q
@@ -86,9 +87,42 @@ def test_t1_19_idle_tick_expires_expired_key():
     assert_ttl_invariants(store)
 
 
-def test_timer_stops_after_tick_exception(caplog):
-    """tick 예외는 로그를 남기고 task를 끝낸다. 앱은 계속 동작한다."""
+def test_t1_28_timer_retries_after_tick_exception(caplog):
+    """일시적 tick 예외는 backoff 후 재시도하고, 성공하면 실패 횟수를 초기화한다."""
     ticks = []
+    sleeps = []
+
+    class FlakyStorage:
+        def _maybe_active_expire(self):
+            ticks.append(1)
+            if len(ticks) <= 2:
+                raise RuntimeError("transient")
+
+    async def fake_sleep(interval):
+        sleeps.append(interval)
+        if len(sleeps) == 5:
+            raise _StopTimer()
+
+    async def scenario():
+        task = asyncio.create_task(
+            _timer_loop(FlakyStorage(), interval=0.1, sleep=fake_sleep)
+        )
+        with pytest.raises(_StopTimer):
+            await task
+
+    with caplog.at_level(logging.ERROR):
+        asyncio.run(scenario())
+
+    # 0.1 sleep → 실패1, 0.2 → 실패2, 0.4 → 성공, 이어서 0.1 → 성공, 0.1 → 중단.
+    assert sleeps == [0.1, 0.2, 0.4, 0.1, 0.1]
+    assert len(ticks) == 4
+    assert caplog.text.count("TTL active cleanup failed") == 2
+
+
+def test_t1_29_timer_stops_after_five_consecutive_failures(caplog):
+    """연속 5회 실패하면 backoff 뒤 task를 끝낸다. 앱은 계속 동작한다."""
+    ticks = []
+    sleeps = []
 
     class FailingStorage:
         def _maybe_active_expire(self):
@@ -96,7 +130,7 @@ def test_timer_stops_after_tick_exception(caplog):
             raise RuntimeError("boom")
 
     async def fake_sleep(interval):
-        return
+        sleeps.append(interval)
 
     async def scenario():
         await _timer_loop(FailingStorage(), interval=0.1, sleep=fake_sleep)
@@ -104,8 +138,9 @@ def test_timer_stops_after_tick_exception(caplog):
     with caplog.at_level(logging.ERROR):
         asyncio.run(scenario())
 
-    assert ticks == [1]
-    assert "TTL active cleanup failed" in caplog.text
+    assert len(ticks) == 5
+    assert sleeps == [0.1, 0.2, 0.4, 0.8, 1.6]
+    assert "stopped after 5 consecutive failures" in caplog.text
 
 
 def test_lifespan_starts_and_cancels_timer(monkeypatch):

@@ -3,7 +3,7 @@
 ## 기준과 상태
 
 - 기준: [01 TTL 계약](01-ttl-contract.md), [04 날씨 TTL/LDC 결정 로그](../scenario_04_response_cache/04-weather-ttl-decision-log.md), [REST API 9절](../../rest-api.md).
-- 이 문서는 확정된 TTL 행동을 정확한 입력·관찰로 구체화한 테스트 계약이다. 아래 표본은 계약을 검증하기 위한 입력이며 새 기능·정책을 추가하지 않는다. 2026-11-14에 T1-01~18, T1-20~21, T1-23~25의 입력·기대를 동결했다. T1-19는 C가 타이머와 함께 동결한다.
+- 이 문서는 확정된 TTL 행동을 정확한 입력·관찰로 구체화한 테스트 계약이다. 아래 표본은 계약을 검증하기 위한 입력이며 새 기능·정책을 추가하지 않는다. 2026-11-14에 T1-01~18, T1-20~21, T1-23~25의 입력·기대를 동결했고, 2026-11-15에 active 시간 예산·hard cap·타이머 예외 재시도(T1-26~29)를 추가 동결했다. T1-19는 C가 타이머와 함께 동결한다.
 - 저장소 코어 테스트: `tests/scenario_01_storage/test_ttl_storage.py`. Active 만료 테스트: `tests/scenario_01_storage/test_ttl_active.py`. HTTP 표면 테스트: `tests/scenario_01_storage/test_ttl_http.py`. 타이머 task 테스트: `tests/scenario_01_storage/test_ttl_timer.py`(C). 날씨 소비자 기능 테스트: `tests/scenario_04_response_cache/test_weather_cache.py`.
 - 테스트 helper: `tests/scenario_01_storage/ttl_state_helpers.py`, `tests/scenario_01_storage/ttl_clock_helpers.py`.
 - 구현 전에 테스트를 실행해 실패 원인을 확인하고, 구현 뒤 같은 테스트를 다시 실행한다. 테스트에 맞추어 TTL 계약을 완화하지 않는다.
@@ -14,11 +14,13 @@
 
 - 사전 상태는 `set`·`expire`로 만든다. `_data`·`_expires`에 직접 값을 넣지 않는다. 만료된 사전 상태는 `set(..., ttl=...)` 뒤 가짜 시계를 만료 시각 이상으로 진행해 만든다.
 - 가짜 벽시계 기준값: `BASE_MS = 1_700_000_000_000`. `advance(ms)`는 현재 값을 `ms`만큼 증가시킨다.
-- `[확정]` 테스트 주입 인터페이스: `MiniRedis(clock=clock, sampler=sampler)`.
+- `[확정]` 테스트 주입 인터페이스: `MiniRedis(clock=clock, sampler=sampler, monotonic=monotonic)`.
   - `clock()`은 정수 epoch ms를 반환한다. 기본값은 실제 벽시계다.
   - `sampler(keys, k)`는 `keys`에서 최대 `k`개를 새 리스트로 반환한다. 기본값은 중복 없는 무작위 표본이다.
-  - `MiniRedis()`는 기존처럼 동작해야 한다. 이 인터페이스는 2026-11-14에 동결했다.
+  - `monotonic()`은 초 단위 단조 시간을 반환한다. 기본값은 `time.monotonic`이다. T1-26~27은 `FixedMonotonic`·`StepMonotonic`을 주입해 시간 예산을 결정적으로 재현한다.
+  - `MiniRedis()`는 기존처럼 동작해야 한다.
 - `[확정]` active tick은 테스트에서 `_maybe_active_expire()` 또는 `_active_expire_cycle(now)`를 직접 호출해 재현한다. 실제 100ms 타이머를 기다리지 않는다. 타이머 task의 주기·유휴 실행은 T1-19(C)에서 확인한다.
+- `[확정]` T1-14~18·25는 `FixedMonotonic()`을 주입해 시간 예산이 중간에 끊지 않게 한다. T1-26은 `StepMonotonic`, T1-27은 `FixedMonotonic`으로 예산 소진과 hard cap을 구분한다.
 - `snapshot(store)`는 기존처럼 `_data`의 사본을 반환한다. `ttl_snapshot(store)`는 `(_expires.copy(), list(_ttl_keys), _ttl_pos.copy())`를 반환한다. 테스트 전용이며 실행 코드의 메서드가 아니다.
 - 불변 조건 검사: `set(_expires) == set(_ttl_keys) == set(_ttl_pos)`, 모든 키의 위치 일치, 세 길이 일치, `_ttl_keys` 중복 없음.
 - 각 호출 직후 반환값 전체와 `_data`·TTL 구조를 확인한다. 반환값의 필드 구성과 타입을 비교하고, 딕셔너리 순서는 강제하지 않는다.
@@ -136,7 +138,7 @@
 
 ## T1-14. active 만료 — 기본 표본
 
-> T1-14~18은 tick 함수를 직접 호출하고 `keys[:k]` 고정 표본 선택기를 쓴다. T1-19는 C의 타이머 테스트다.
+> T1-14~18은 tick 함수를 직접 호출하고 `keys[:k]` 고정 표본 선택기와 `FixedMonotonic`을 쓴다. T1-19는 C의 타이머 테스트다.
 
 - 사전 상태: TTL 1_000ms인 키 25개를 `set`으로 만든다. `advance(1_000)`.
 - 입력: 표본 선택기는 현재 `_ttl_keys`의 앞에서부터 최대 20개를 반환한다. `_maybe_active_expire()`를 호출한다.
@@ -155,7 +157,7 @@
 - 사전 상태: TTL 1_000ms인 키 5개를 먼저 `set`하고 `advance(1_000)`로 만료시킨다. 이어 TTL 1_000ms인 키 15개를 `set`한다. `_ttl_keys`에는 만료 5개가 앞에, 살아 있는 15개가 뒤에 있다.
 - 입력: 표본 선택기가 20개를 모두 반환하게 하고 `_maybe_active_expire()`를 호출한다.
 - 기대: 5/20 = 25%이므로 표본 선택기가 2회 호출된다. 두 번째 표본에서 남은 만료 키가 없으면 추가 반복은 없다. 만료 5개가 제거되고 15개가 보존된다.
-- 유지: 최대 2회. 불변 조건.
+- 유지: 25% 규칙으로 조기 종료. 불변 조건.
 
 ## T1-17. active tick — 호출마다 실행
 
@@ -250,16 +252,50 @@
 - 기대: sampler 호출 0, 예외 없음, 불변 조건 유지. TTL 없는 키는 보존된다.
 - 유지: tick은 빈 목록을 따로 검사하지 않고 cycle이 `(0, 0)`으로 끝난다.
 
+## T1-26. active tick — 시간 예산 소진 시 중단
+
+- 사전 상태: TTL 1_000ms인 키 200개를 `set`으로 만들고 `advance(1_000)`.
+- 입력: 표본 선택기는 앞에서부터 최대 20개를 반환한다. `monotonic`은 호출마다 0.2ms 진행하는 `StepMonotonic(step_s=0.0002)`을 주입한다. `_maybe_active_expire()`를 호출한다.
+- 검증 시점: 호출 직후.
+- 기대: cycle 5회, 각 20개 제거로 총 100개 제거. 5번째 cycle 뒤 누적 1.0ms에 도달해 중단한다. 표본 선택기 호출은 5회다. 남은 TTL 키는 100개다.
+- 유지: 같은 `now`, 불변 조건. `get()`의 lazy 만료로 제거된 것이 아니라 cycle이 TTL 구조에서 제거했는지 `ttl_snapshot`으로 확인한다.
+
+## T1-27. active tick — hard cap 도달 시 중단
+
+- 사전 상태: TTL 1_000ms인 키 2,000개를 `set`으로 만들고 `advance(1_000)`.
+- 입력: `monotonic`은 항상 0을 반환하는 `FixedMonotonic()`을 주입한다. 표본 선택기는 앞에서부터 최대 20개를 반환한다. `_maybe_active_expire()`를 호출한다.
+- 검증 시점: 호출 직후.
+- 기대: 시간 예산은 소진되지 않지만 hard cap 50 cycles에서 중단한다. 총 1,000개 제거, 1,000개 유지. 표본 선택기 호출은 50회다.
+- 유지: 불변 조건.
+
+## T1-28. 타이머 — 일시적 tick 예외 후 재시도
+
+- 사전 상태: fake sleep과, 처음 2회 tick에서 `RuntimeError`를 던지고 이후 성공하는 fake 저장소.
+- 입력: `_timer_loop`를 실행하고 5번째 가짜 sleep에서 테스트 전용 `_StopTimer`를 던진다.
+- 검증 시점: 각 sleep 직후와 루프 종료 후.
+- 기대: sleep 간격은 `0.1, 0.2, 0.4, 0.1, 0.1`초. tick은 4회 실행되고, 3번째 성공에서 실패 횟수가 0으로 초기화된다. 예외 로그는 2회다.
+- 유지: `_StopTimer`는 sleep에서 발생한 테스트 신호이며 tick 예외로 취급하지 않는다.
+
+## T1-29. 타이머 — 연속 5회 실패 후 중단
+
+- 사전 상태: fake sleep과, 매 tick에서 `RuntimeError`를 던지는 fake 저장소.
+- 입력: `_timer_loop`를 실행한다.
+- 검증 시점: 루프 종료 후.
+- 기대: tick 5회, sleep 간격 `0.1, 0.2, 0.4, 0.8, 1.6`초. 5번째 실패 뒤 task가 끝나고 `stopped after 5 consecutive failures` 로그가 남는다. 이후 tick은 없다.
+- 유지: `CancelledError`는 재시도하지 않고 전파한다. 이 테스트는 tick 예외만 다룬다.
+
 ## T1-22. 확정 요약 (테스트 대상 아님)
 
 - `[확정]` active 표본은 중복 없이 뽑는다(`random.sample`). `T1-14`~`T1-18`의 고정 표본 선택기는 이 조건과 맞는다.
 - `[확정]` active 만료는 lifespan의 100ms 주기 타이머가 실행한다(D-24). `T1-14`~`T1-18`은 tick 함수를 직접 호출한다. `T1-19`는 C가 타이머와 함께 작성한다.
+- `[확정]` active tick은 표본 20개, 1ms 시간 예산, 최대 50 cycles, 25% 규칙을 쓴다. `T1-26`은 예산 소진, `T1-27`은 hard cap을 검증한다.
+- `[확정]` 타이머 tick 예외는 지수 backoff로 재시도하고, 연속 5회 실패하면 중단한다. `T1-28`은 일시 오류 회복, `T1-29`는 5회 중단을 검증한다.
 - `[확정]` `incr`·`decr`는 lazy 만료 검사를 하고, 만료된 키는 `NOT_FOUND`, 살아 있는 키의 TTL은 유지한다(T1-23).
 - `[확정]` `POST /kv/expire`·`POST /kv/persist`는 계약 필드 외 추가 필드를 무시한다. 별도 테스트를 만들지 않는다.
 
 ## 실행·구현 순서
 
-1. 테스트 ID와 입력은 동결됐다(2026-11-14). T1-19는 C가 타이머와 함께 동결한다.
+1. 테스트 ID와 입력은 동결됐다(2026-11-14). T1-19는 C가 타이머와 함께 동결했고, T1-26~29는 2026-11-15에 동결했다.
 2. 저장소 테스트를 먼저 작성하고, 구현 전에 실행해 실패 원인을 기록한다. 동결된 입력만 사용하고, 미정 항목이 생기면 작성하지 않고 사용자 확인을 받는다.
 3. HTTP 표면 테스트와 날씨 소비자 테스트를 작성한다.
 4. `storage.py`의 TTL 저장·조회·삭제·lazy/active를 구현하고 같은 테스트를 다시 실행한다.

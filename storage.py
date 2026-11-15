@@ -53,13 +53,18 @@ def _json_type(value):
 class MiniRedis:
     """각 인스턴스가 독립된 키·value 상태를 소유한다."""
 
-    def __init__(self, clock=None, sampler=None):
+    _ACTIVE_SAMPLE_SIZE = 20
+    _ACTIVE_TIME_BUDGET_S = 0.001
+    _ACTIVE_MAX_CYCLES = 50
+
+    def __init__(self, clock=None, sampler=None, monotonic=None):
         self._data = {}
         self._expires = {}
         self._ttl_keys = []
         self._ttl_pos = {}
         self._clock = clock if clock is not None else lambda: int(time.time() * 1000)
         self._sampler = sampler if sampler is not None else random.sample
+        self._monotonic = monotonic if monotonic is not None else time.monotonic
 
     def _now_ms(self):
         """현재 시각을 정수 epoch ms로 반환한다."""
@@ -103,16 +108,22 @@ class MiniRedis:
         return True
 
     def _maybe_active_expire(self):
-        """타이머 tick. 같은 시점으로 active 사이클을 최대 2회 실행한다."""
+        """타이머 tick. 시간 예산 안에서 같은 시점으로 active 사이클을 반복한다."""
         now = self._now_ms()
-        expired, size = self._active_expire_cycle(now)
-        if size > 0 and expired * 4 >= size:
-            self._active_expire_cycle(now)
+        deadline = self._monotonic() + self._ACTIVE_TIME_BUDGET_S
+        cycles = 0
+        while cycles < self._ACTIVE_MAX_CYCLES:
+            expired, size = self._active_expire_cycle(now)
+            cycles += 1
+            if size == 0 or expired * 4 < size:
+                break
+            if self._monotonic() >= deadline:
+                break
 
     def _active_expire_cycle(self, now_ms):
         """TTL 키에서 최대 20개를 뽑아 만료된 키를 제거한다."""
         keys = self._ttl_keys
-        k = min(20, len(keys))
+        k = min(self._ACTIVE_SAMPLE_SIZE, len(keys))
         if k == 0:
             return 0, 0
         if self._sampler is not None:

@@ -376,13 +376,13 @@ TTL의 저장소 행동 계약은 [TTL 계약](resc/scenario_01_storage/01-ttl-c
 - 만료된 키는 `GET /kv`·`DELETE /kv`·`GET /kv/ttl`·`POST /kv/expire`·`POST /kv/persist`에서 없는 키로 취급한다.
 - `PUT /kv`가 만료된 키를 덮어쓰면 이전 TTL을 물려주지 않고 새 키로 취급한다. `ttl`이 있으면 새로 걸고, 없으면 TTL 없이 저장한다.
 - `GET /kv`의 `{"found":false}`는 키가 없거나 만료된 경우다. 두 경우의 필드 구성은 같다.
-- 논리적 만료와 물리적 제거 시점은 같지 않다. active 만료는 100ms 주기 타이머로 동작하며, 유휴 상태에서도 실행된다.
+- 논리적 만료와 물리적 제거 시점은 같지 않다. active 만료는 100ms 주기 타이머로 동작하며, tick마다 1ms 예산 안에서 TTL 키 일부를 검사하고 유휴 상태에서도 실행된다.
 - `POST /kv/expire`는 키가 없거나 만료면 `ttl` 값과 무관하게 200 `{"found":false}`를 반환한다. 키 존재 판정이 TTL 타입 검증보다 앞선다.
 - 서버 재시작 시 TTL 상태도 함께 사라진다.
 
 ### 9.6 확정과 남은 미정
 
-- active 만료는 lifespan의 100ms 주기 타이머가 실행한다. 표본은 중복 없이 뽑는다. HTTP 표면에는 영향을 주지 않는다.
+- active 만료는 lifespan의 100ms 주기 타이머가 실행한다. tick은 1ms 시간 예산·최대 50 cycles·표본 20개·25% 규칙을 쓰고, 표본은 중복 없이 뽑는다. tick 예외는 지수 backoff로 재시도하고 연속 5회 실패하면 active 정리를 멈춘다. HTTP 표면에는 영향을 주지 않는다.
 - `incr`·`decr`는 lazy 만료 검사를 하고, 만료된 키는 `NOT_FOUND`, 살아 있는 키의 TTL은 유지한다.
 - `POST /kv/expire`·`POST /kv/persist`는 계약 필드 외 추가 필드를 무시한다. `PUT /kv`와 같다. `POST /kv/incr`·`POST /kv/decr`는 조건 필드가 조용히 무시되지 않도록 알 수 없는 필드를 계속 거절한다(8절).
 - TTL 표면에서 남은 미정은 없다. 중복 JSON 필드·`Content-Type`·404/405 같은 공통 HTTP 정책은 7절의 미정을 따른다.
