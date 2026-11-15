@@ -6,7 +6,7 @@
 
 - 1~7절은 저장·조회·삭제와 공통 사용 범위, 8절은 JSON 자료형과 증감의 상세 계약, 9절은 TTL 표면이다.
 - JSON 자료형 저장과 `POST /kv/incr`·`POST /kv/decr`를 구현했다. 기존 숫자·불리언·배열·객체 거절 테스트는 승인된 타입 지원에 따라 같은 입력의 저장 성공 검증으로 전환했다.
-- TTL 표면은 9절에 추가했다. 저장소 행동 계약은 [TTL 계약](resc/scenario_01_storage/01-ttl-contract.md)을 따른다. TTL은 아직 구현하지 않았다.
+- TTL 표면은 9절에 정리했으며 구현되어 있다. 저장소 행동 계약은 [TTL 계약](resc/scenario_01_storage/01-ttl-contract.md)을 따른다.
 - 확장 설계의 행동 근거는 [시나리오 02 통합 결론](resc/scenario_02_concurrent_counter/02-concurrent-counter-integrated-review.md), 함수 흐름은 [탑다운 함수 초안](resc/scenario_02_concurrent_counter/02-top-down-functions.md)을 따른다.
 - 확장 계약의 구체적인 검증 입력·순서와 미검증 항목은 [테스트 케이스](resc/scenario_02_concurrent_counter/02-test-cases.md)를 따른다.
 
@@ -105,7 +105,7 @@ curl --request PUT 'http://127.0.0.1:5000/kv' \
 
 `GET /kv?key=sample%3Aone`
 
-`key` 쿼리가 필수다. 조회는 보관 상태를 변경하지 않는다.
+`key` 쿼리가 필수다. 유효한 키의 조회는 보관 상태를 변경하지 않으며, 만료된 키를 발견하면 정리한다.
 
 `GET /kv`는 TTL을 반환하지 않는다. 남은 TTL은 `GET /kv/ttl`로 조회한다. 만료된 키는 없는 키로 취급해 `{"found":false}`를 반환한다.
 

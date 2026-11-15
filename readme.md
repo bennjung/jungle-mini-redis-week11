@@ -1,74 +1,172 @@
-# Mini redis 
+# Mini Redis
 
-기술스택 : 
+Mini Redis는 HTTP로 사용할 수 있는 메모리 기반 키-값 저장소입니다. 반복되는 날씨 조회를 대표 상황으로 삼아 응답 재사용과 만료를 설명하고, 같은 키에 요청이 몰리는 카운터를 별도로 검증했습니다.
 
-구현 스코프 : 
+실제 Redis 서버나 Redis 통신 규약을 구현한 것은 아닙니다. 데이터는 프로세스 메모리에만 보관하므로 서버를 재시작하면 사라집니다.
 
-최종 산출물 : 
+## 대표 상황: 같은 장소의 날씨를 반복 조회한다면
 
-## HTTP 서버 실행
+날씨 서비스에 같은 장소의 조회가 자주 들어온다고 가정합니다. 매번 원본에 요청하는 대신, 일정 시간 재사용할 수 있는 응답을 장소별 키에 보관합니다. 별도로 장소별 조회 횟수도 집계한다고 생각해 볼 수 있습니다.
 
-프로젝트 루트에서 실행한다.
+```text
+날씨 조회 요청
+    │
+    ├─ 유효한 응답이 있음 ──────────→ 보관한 응답 반환
+    └─ 응답이 없거나 만료됨 ────────→ 원본 조회 → TTL과 함께 보관 → 응답 반환
 
-```sh
+별도 흐름: 같은 장소의 조회 횟수 → 저장소에 증감 요청
+```
+
+이 상황에서 Mini Redis의 기능은 서로 다른 문제를 담당합니다.
+
+1. **찾고 재사용:** 장소에 해당하는 키로 보관한 응답을 찾습니다. 날씨 테스트에서는 유효한 동안 재요청해도 가짜 원본의 호출 횟수가 **1회로 유지**되는지 확인했습니다.
+2. **오래된 응답 방지:** TTL(보관 기간)이 지나면 조회 시 없는 키로 취급합니다. 사용자가 더 빨리 갱신해야 한다면 해당 키를 직접 삭제할 수도 있습니다. 테스트는 두 경우 모두 가짜 원본을 다시 호출하는지 확인합니다.
+3. **더 이상 찾지 않는 응답 정리:** 다시 조회되지 않는 만료 키도 남을 수 있으므로, 실행 중 **100ms마다 최대 20개**의 TTL 키를 표본으로 검사합니다. 조건에 따라 같은 시점에 한 번 더 검사하지만 모든 키가 만료 즉시 제거되는 것은 아닙니다.
+4. **조회 횟수 증감:** 같은 숫자를 여러 요청이 각각 읽고 저장하면 증가분이 유실될 수 있습니다. 저장소에 증감 요청을 보내 읽기·계산·저장을 한 연산으로 처리합니다. 별도의 카운터 성능 실험에서는 동시 요청 수 10에서 이전 Flask 기반 Mini Redis가 **2,582.47건/초**, MySQL이 **82.65건/초**의 처리량 중앙값을 보였습니다. 양쪽의 통신 경로와 데이터 보존 보장은 다릅니다.
+
+이것은 기능들을 이해하기 위한 **통합 예시**입니다. 실제 날씨 서비스와 조회 횟수 집계를 함께 구현하거나 전체 흐름을 성능 측정하지는 않았습니다. 날씨 재사용은 가짜 원본을 쓰는 기능 테스트이고, 카운터 수치는 별도 실험의 결과입니다. 캐시를 사용하면 모든 상황에서 원본 부하가 줄어든다거나 모든 DBMS에서 같은 병목이 발생한다고 가정하지 않습니다.
+
+메모리 반영과 디스크에 변경을 보존하는 방식은 비용과 보장이 다릅니다. 성능 차이를 살펴보더라도, 내구성이 필요한 데이터를 이 저장소로 대체할 수 있다는 뜻은 아닙니다.
+
+## 구현 범위
+
+| 시나리오 | 구현과 검증 범위 |
+| --- | --- |
+| 저장소 | JSON `value` 저장·조회·삭제, 입력 검증, 덮어쓰기 |
+| 카운터 | 기존 숫자 `value`의 증감과 선택적 상한·하한 검사, 같은 키에 대한 동시 요청 검증 |
+| 만료·무효화 | 키별 보관 기간 설정·조회·제거, 만료된 키 처리, 한 키의 수동 삭제 |
+| 응답 재사용 | 테스트에서 가짜 날씨 원본과 KV HTTP API를 사용해 재사용·만료·수동 무효화 확인 |
+| 성능 비교 | 정확성을 확인하면서 카운터와 저장소 요청의 처리량·응답 시간을 측정 |
+
+날씨 애플리케이션이나 `/weather` 경로는 구현하지 않았습니다. 테스트가 원본 호출과 저장소 사용을 직접 조합합니다.
+
+## 구조와 요청 흐름
+
+```text
+외부 프로그램
+    │ HTTP + JSON
+    ▼
+app.py: FastAPI
+    │ 요청 형식·필수 필드 확인
+    ▼
+storage.py: MiniRedis
+    │ 입력 검증 → 만료 확인 → 저장·조회·삭제·증감
+    ▼
+결과를 HTTP 응답으로 반환
+
+앱 실행 중: 100ms 주기 작업 → TTL이 있는 키의 일부를 검사 → 만료된 키 정리
+```
+
+HTTP는 JSON 해석과 필수 필드 확인, 저장소 호출과 응답 생성을 담당합니다. 저장소는 키·`value`·TTL 등의 유효성을 검사하고 상태를 변경합니다. 예상하지 못한 내부 오류를 입력 오류로 바꾸지는 않습니다.
+
+`python app.py`는 하나의 `MiniRedis` 인스턴스를 만들고 `workers=1`인 uvicorn 서버에 전달합니다. 저장소 연산은 현재 단일 이벤트 루프에서 중간 대기 없이 실행됩니다. 이 실행 경로 밖에서 저장소를 여러 스레드나 프로세스가 동시에 호출하는 경우는 보장하지 않습니다.
+
+## 주요 선택과 그 선택이 유효한 상황
+
+### 키로 바로 찾는 저장소
+
+반복 조회할 항목을 키로 지정할 수 있는 상황에서, `MiniRedis`는 Python `dict`에 키와 `value`를 보관합니다. `dict`가 해시 계산·충돌 처리·크기 변경을 담당하며, 해시 테이블을 별도로 구현하지는 않았습니다. 키로 찾는 작업을 단순하게 표현할 수 있지만, 관계형 질의나 디스크 영속성을 제공하지 않습니다.
+
+### 서버에서 증감을 하나의 연산으로 처리
+
+여러 사용자가 하나의 조회수처럼 같은 숫자를 바꿀 때, 클라이언트가 조회와 저장을 따로 수행하면 그 사이 다른 요청이 끼어들 수 있습니다. `incr`·`decr`는 저장소 안에서 현재 `value` 확인, 계산, 조건 검사, 저장을 수행합니다. 현재 단일 이벤트 루프 실행 경로에서 동시 요청의 증가분을 확인했습니다.
+
+숫자 증감은 이 프로젝트가 선택한 동시성 검증 시나리오입니다. 여러 프로세스 사이의 상태 공유, 요청 실패 후 재시도에 따른 중복 처리, 증감과 삭제·만료의 경합을 보장하는 것은 아닙니다.
+
+### 만료 판정과 메모리 정리 분리
+
+날씨 응답처럼 일정 시간만 재사용할 데이터는 키별 TTL(보관 기간)을 밀리초로 설정합니다. 저장소는 절대 만료 시각을 보관하며 현재 시각이 만료 시각 이상이면 만료로 판정합니다.
+
+- **요청 시 확인:** 조회 등에서 해당 키가 만료됐다면 제거하고 없는 키로 취급합니다. 자주 조회되는 항목의 오래된 응답을 반환하지 않기 위한 경로입니다.
+- **주기적 정리:** 다시 조회되지 않는 항목도 남을 수 있으므로 100ms마다 TTL 키에서 최대 20개를 무작위로 골라 정리합니다. 표본의 4분의 1 이상이 만료됐으면 같은 시점으로 한 번 더 검사합니다. 전체 키를 매번 훑는 비용을 피하지만, 정확히 만료 시각에 모든 메모리가 회수되는 것은 아닙니다.
+
+이처럼 요청 시 확인과 주기적 정리를 함께 사용하는 방향은 Redis의 만료 처리에서 참고했습니다. 다만 표본 크기·반복 횟수 등은 이 구현의 계약이며 Redis의 내부 동작 전체와 같다는 뜻은 아닙니다. 벽시계가 바뀌면 만료 시점도 영향을 받습니다. 자세한 조건은 [TTL 계약](resc/scenario_01_storage/01-ttl-contract.md)을 참고합니다.
+
+### 덮어쓰기와 증감에서 TTL을 다르게 취급
+
+새 `value`를 TTL 없이 저장하면 기존 TTL을 제거합니다. 반면 숫자를 증감하면 살아 있는 키의 기존 TTL을 유지합니다. 예를 들어 정해진 기간 동안의 카운터를 갱신할 때마다 만료가 사라지는 일을 피하기 위한 선택입니다. 저장 시 TTL을 유지하려면 기간을 다시 지정해야 합니다. 증감 시 TTL을 유지하는 동작은 Redis의 증감 명령과 같은 방향입니다.
+
+## 검증 결과
+
+### 기능 테스트
+
+2026-11-15 현재 작업 환경에서 `.venv/bin/python -m pytest tests/ -q`를 실행한 결과 **625개 통과, 38개 건너뜀, 경고 1개**였습니다. 건너뛴 항목에는 반복 횟수와 시간 한도를 지정해야 하는 실제 TCP 동시 요청 8개, 외부 JMeter·MySQL 또는 비밀 파일 설정이 필요한 검증이 포함됩니다. 건너뛴 항목을 통과로 계산하지 않습니다.
+
+기능 테스트는 저장·조회·삭제와 입력 경계, 증감과 조건 검사, TTL 경계와 정리, HTTP 요청 처리를 확인합니다. 날씨 시나리오는 가짜 원본의 호출 횟수를 통해 유효한 응답 재사용과 만료·수동 삭제 이후 재조회를 확인합니다. 이전에 별도 조건으로 실행한 TCP 동시 요청과 성능 시험은 아래 기록에서 확인할 수 있습니다.
+
+### MySQL과의 이전 카운터 비교
+
+**현재 FastAPI 구현의 측정이 아니라, 이전 Flask 기반 Mini Redis와 MySQL 8.4를 비교한 결과**입니다. JMeter에서 같은 카운터를 1씩 증가시키는 요청을 회차당 10,000건씩 보내고, 동시 요청 수 1·10·50·100에서 대상별 5회 반복했습니다. 본 측정 40회, 총 400,000건이 모두 성공했고 매 회차 최종 카운터는 10,000이었습니다.
+
+| 동시 요청 수 | Mini Redis 처리량 중앙값 | MySQL 처리량 중앙값 |
+| --- | ---: | ---: |
+| 1 | 1,593.58건/초 | 66.68건/초 |
+| 10 | 2,582.47건/초 | 82.65건/초 |
+| 50 | 2,544.78건/초 | 82.46건/초 |
+| 100 | 2,482.91건/초 | 82.23건/초 |
+
+이 실험의 처리량 중앙값은 Mini Redis 쪽이 약 23.9~31.2배 높았습니다. 그러나 Mini Redis는 HTTP로 메모리에 반영하고, MySQL은 JDBC로 접근하며 디스크 내구성 설정을 사용했습니다. **같은 보장이나 같은 통신 경로를 비교한 수치가 아닙니다.** 또한 측정 도구 자체의 영향은 아직 검증하지 않았고, 실제 Redis와 비교한 결과도 아닙니다. 같은 행의 잠금 대기와 변경 확정 대기는 관찰했지만 지연을 각각의 원인별로 분해하지는 않았습니다.
+
+### 이후 서버 구성·만료 비교
+
+별도 실험에서는 MySQL을 제외하고 Flask와 FastAPI 구성, TTL 구현 전후를 비교했습니다. 카운터·수동 무효화 수명주기·만료 키가 쌓인 상황을 합쳐 **140회, 1,400,000건 모두 성공**했고 최종 상태 확인을 통과했습니다. 이 결과는 MySQL 대비 성능이나 날씨 원본 호출을 포함한 성능이 아닙니다. 서버 구성과 연결 처리 방식이 달라 순수 프레임워크 성능으로도 해석하지 않습니다.
+
+상세 조건·측정값·실패 이력·한계는 [성능 실행 기록](resc/scenario_03_performance/03-performance-test-worklog.md), [이전 비교 집계](resc/scenario_03_performance/03-performance-results.json), [서버 구성 비교 집계](resc/scenario_03_performance/03-stack-comparison-results.json)를 참고합니다.
+
+## 실행과 사용
+
+프로젝트 루트에서 실행합니다. `requirements-dev.txt`는 서버와 테스트에 필요한 의존성을 함께 설치합니다. 지원 버전 범위는 아직 확정하지 않았습니다.
+
+```bash
 python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements-dev.txt
 .venv/bin/python app.py
 ```
 
-- 접속 주소: `http://127.0.0.1:5000`
-- 종료: 실행 중인 터미널에서 `Ctrl+C`
-- 현재는 같은 컴퓨터에서만 접속할 수 있는 단일 이벤트 루프 개발 서버다. `app.py`가 uvicorn을 `workers=1`로 실행한다.
-- 데이터는 메모리에 보관하므로 서버 종료·재시작 시 사라진다.
-- 요청 방법은 [REST API 명세](rest-api.md)를 참고한다.
+서버는 `http://127.0.0.1:5000`에서 실행되며 `Ctrl+C`로 종료합니다. 현재 주소는 같은 컴퓨터에서만 접근하는 개발용 주소입니다.
 
-## 저장소 단위 테스트
+```bash
+# 저장: TTL 60초
+curl --request PUT 'http://127.0.0.1:5000/kv' \
+  --header 'Content-Type: application/json' \
+  --data '{"key":"counter:views","value":0,"ttl":60000}'
 
-```sh
-python3 -m venv .venv
-.venv/bin/python -m pip install -r requirements-dev.txt
-.venv/bin/python -m pytest tests/
+# 1 증가
+curl --request POST 'http://127.0.0.1:5000/kv/incr' \
+  --header 'Content-Type: application/json' \
+  --data '{"key":"counter:views","amount":1}'
+
+# 조회
+curl --get 'http://127.0.0.1:5000/kv' --data-urlencode 'key=counter:views'
+
+# 삭제
+curl --request DELETE --get 'http://127.0.0.1:5000/kv' \
+  --data-urlencode 'key=counter:views'
 ```
 
-가상환경 활성화는 `source .venv/bin/activate`로 한다.
+키는 UTF-8 기준 1~256바이트입니다. `value`는 JSON 자료형을 지원하며 크기는 타입별 계약에 따라 최대 65,536바이트입니다. TTL은 정수 밀리초입니다. 전체 입력·오류·응답과 TTL 설정·조회·제거 방법은 [REST API 명세](rest-api.md)를 참고합니다.
 
-테스트 계약은 [저장소 시나리오](resc/scenario_01_storage/01-storage-scenario.md), 명세 대조와 실행 결과는 [작업 기록](resc/scenario_01_storage/storage-test-worklog.md)을 참고한다. HTTP 구현·분리 테스트·실제 로컬 HTTP 검증은 [HTTP 담당 범위](resc/scenario_01_storage/01-http-scope.md)를 참고한다.
+테스트 실행:
 
-### JSON 자료형·증감 테스트
-
-[테스트 케이스](resc/scenario_02_concurrent_counter/02-test-cases.md)를 참고한다. JSON 자료형 저장과 증감을 구현했으며, 기존 숫자·불리언·배열·객체 거절 테스트도 승인된 계약에 따라 같은 입력의 저장 성공으로 전환했다.
-
-```sh
-.venv/bin/python -m pytest tests/scenario_01_storage/test_json_types_extension.py tests/scenario_02_concurrent_counter -q
+```bash
+.venv/bin/python -m pytest tests/ -q
 ```
 
-실제 TCP 동시 요청의 반복 횟수와 완료 한도는 아직 확정하지 않았다. `COUNTER_TEST_REPEAT`·`COUNTER_TEST_TIMEOUT`을 실행자가 지정한 경우에만 해당 테스트를 실행하며, 미지정 시 건너뛴다. 건너뛴 테스트를 검증 완료로 세지 않는다.
+TCP 동시 요청 테스트는 실행자가 `COUNTER_TEST_REPEAT`와 `COUNTER_TEST_TIMEOUT`을 지정해야 합니다. 외부 성능 도구 검증은 별도 환경과 설정이 필요합니다. 성능 시험 준비와 실패 후 처리 절차는 [실행 기록](resc/scenario_03_performance/03-performance-test-worklog.md)을 따릅니다.
 
-### 성능 비교 설계
+## 한계와 미검증 범위
 
-[03 성능 비교 시나리오](resc/scenario_03_performance/03-performance-scenario.md)와 [JMeter 테스트 설계](resc/scenario_03_performance/03-jmeter-test-design.md)를 참고한다. 도구는 Apache JMeter이며 기존 pytest 기능 테스트와 구분한다. 실행 계획·조율·집계와 측정 도구 검증을 `tests/scenario_03_performance/`에 구현했다. 실제 실행 범위·실패·분석은 [실행 기록](resc/scenario_03_performance/03-performance-test-worklog.md)에 남긴다.
+- 메모리 전용이며 영속화·재시작 복구를 구현하지 않았습니다. 결제·재고처럼 데이터 유실을 허용할 수 없는 작업의 DB 대체재로 사용할 수 없습니다.
+- 단일 이벤트 루프·단일 프로세스의 개발 서버입니다. 다중 프로세스·스레드 안전성, 운영 배포와 장애 복구는 보장하지 않습니다.
+- 테스트에서 가짜 원본을 사용했으며 실제 날씨 API 연동, 원본 장애, 동시 캐시 미스는 검증하지 않았습니다.
+- 실제 Redis와의 성능 비교, 현재 FastAPI 구현과 MySQL의 동일 조건 재측정, 계측 영향과 지연 원인별 비용은 검증하지 않았습니다.
+- 전체 저장량 제한, 메모리 부족과 보안·인증은 구현 또는 검증 범위에 포함되지 않습니다.
 
-- 실행 환경: JMeter 5.6.3, Java 17, MySQL 8.4 및 Connector/J. JMeter `lib/`에 Connector/J를 준비한다. 이 도구는 Python에서 HTTP 부하를 직접 만들지 않고 JMeter를 실행한다.
-- 시험 전용 스키마에만 `tests/scenario_03_performance/mysql_setup.sql`을 적용한다. 기존 테이블을 자동 삭제하거나 변경하지 않는다.
-- `run_performance.py --help`에서 `single`·`pilot`·`campaign`의 필수 입력을 확인한다. 총 요청 수와 시간 한도는 파일럿 후 본 측정 전에 고정한다. 프로그램이 본 측정 수치를 자동 선택하지 않는다.
-- 접속 정보는 `M3_HTTP_HOST`·`M3_HTTP_PORT`·`M3_JDBC_URL`·`M3_JDBC_USER`, 도구 위치는 `M3_JMETER_BIN`·`M3_JAVA_HOME`으로 전달할 수 있다. 비밀번호는 `M3_JDBC_PASSWORD_FILE`로 사용자 전용 파일 경로를 전달하며 명령행·JMX·저장소에 넣지 않는다. JDBC URL에 비밀번호나 자동 재연결을 넣으면 거절한다.
-- 실행에는 비밀 없는 버전 기록 JSON(`--environment-file`), 새 결과 위치(`--results-dir`), 같은 실제 대상 환경에서 계속 공유할 상태 위치(`--state-dir`)가 필요하다. 결과 위치가 바뀌어도 상태 위치는 바꾸지 않는다. 불명확한 실패 후 표식이나 잠금을 지워 자동 재실행하지 않는다.
-- 새 측정 도구의 기본 pytest 실행은 외부 도구 검증을 건너뛴다. 실제 HTTP/JMeter 검증에는 `M3_RUN_JMETER=1`, 실제 시험용 MySQL 검증에는 추가로 `M3_RUN_JDBC=1`과 접속 정보가 필요하다. 건너뛴 항목을 통과로 세지 않는다.
-- `campaign` 전에는 양쪽 S3-01 통과와 N·시간 한도 확정을 실행자가 확인해야 한다. 현재 CLI가 이 승인 절차 자체를 자동 검증하지는 않는다.
-- 현재 사용자가 확정한 본 측정 조건은 N=10,000, 동시성1·10·50·100, 요청별5초·전체360초·준비30초·종료15초, 대상별5회 교차 반복이다. 예비 전체120초 중단 자료는 새 본 측정과 분리해 보존한다.
-- 실제 결과: 측정 도구83개 검증 통과, 본 측정40개·400,000건 모두 성공. 현재 구성의 처리량 중앙값은 Mini Redis 약1,594~2,582건/초, MySQL 약67~83건/초였다. 양쪽의 내구성·통신 경로 차이와 세부 분석은 [실행 기록](resc/scenario_03_performance/03-performance-test-worklog.md), 수치와 범위는 [집계 JSON](resc/scenario_03_performance/03-performance-results.json)을 따른다. 로컬 원자료는 Git에서 제외한 `tests/scenario_03_performance/results/final-20261114.tar.gz`에 보존한다.
-- 계측 코드 자체의 영향과 별도 측정 도구와의 대조는 미검증이다. 위 수치는 현재 계측 구성의 관찰이며 저장소 자체의 속도 차이나 서버 포화를 확정하지 않는다. 추가 진단·개선 논의는 [이슈 #5](https://github.com/bennjung/jungle-mini-redis-week11/issues/5)로 보류했다.
+## 관련 문서
 
-## 저장소 사용
-
-```python
-from storage import MiniRedis
-
-redis = MiniRedis()
-redis.set("sample:one", "hello")  # {"ok": True}
-redis.get("sample:one")  # {"found": True, "value": "hello"}
-redis.delete("sample:one")  # {"found": True, "value": "hello"}
-redis.get("sample:one")  # {"found": False}
-```
-
-각 객체는 독립된 Python 딕셔너리를 사용한다. 전체 키·value 관찰은 테스트 전용 `tests/scenario_01_storage/storage_helpers.py`의 `snapshot(store)`로 수행한다. 실행 코드에는 스냅샷 메서드가 없다.
+- [과제 요구사항](resc/phase.md)
+- [저장소 시나리오](resc/scenario_01_storage/01-storage-scenario.md) · [TTL 계약](resc/scenario_01_storage/01-ttl-contract.md)
+- [동시 카운터 합의 및 테스트](resc/scenario_02_concurrent_counter/02-concurrent-counter-integrated-review.md)
+- [성능 비교 시나리오](resc/scenario_03_performance/03-performance-scenario.md) · [실행 기록](resc/scenario_03_performance/03-performance-test-worklog.md)
+- [날씨 응답 재사용 시나리오](resc/scenario_04_response_cache/04-response-cache-scenario.md)
+- [REST API 명세](rest-api.md)
