@@ -59,7 +59,7 @@ storage.py: MiniRedis
 
 HTTP는 JSON 해석과 필수 필드 확인, 저장소 호출과 응답 생성을 담당합니다. 저장소는 키·`value`·TTL 등의 유효성을 검사하고 상태를 변경합니다. 예상하지 못한 내부 오류를 입력 오류로 바꾸지는 않습니다.
 
-`python app.py`는 하나의 `MiniRedis` 인스턴스를 만들고 `workers=1`인 uvicorn 서버에 전달합니다. 저장소 연산은 현재 단일 이벤트 루프에서 중간 대기 없이 실행됩니다. 이 실행 경로 밖에서 저장소를 여러 스레드나 프로세스가 동시에 호출하는 경우는 보장하지 않습니다.
+`python app.py`는 하나의 `MiniRedis` 인스턴스를 만들고 `workers=1`인 uvicorn 서버에 전달합니다. 저장소 연산은 현재 단일 이벤트 루프(표준 `asyncio` + `httptools` HTTP 파서)에서 중간 대기 없이 실행됩니다. 이 실행 경로 밖에서 저장소를 여러 스레드나 프로세스가 동시에 호출하는 경우는 보장하지 않습니다.
 
 ## 주요 선택과 그 선택이 유효한 상황
 
@@ -86,11 +86,19 @@ HTTP는 JSON 해석과 필수 필드 확인, 저장소 호출과 응답 생성�
 
 새 `value`를 TTL 없이 저장하면 기존 TTL을 제거합니다. 반면 숫자를 증감하면 살아 있는 키의 기존 TTL을 유지합니다. 예를 들어 정해진 기간 동안의 카운터를 갱신할 때마다 만료가 사라지는 일을 피하기 위한 선택입니다. 저장 시 TTL을 유지하려면 기간을 다시 지정해야 합니다. 증감 시 TTL을 유지하는 동작은 Redis의 증감 명령과 같은 방향입니다.
 
+### 1요청 구간 분석에 따른 HTTP 파서·입력 검증 선택
+
+1요청 처리 시간을 계측해 본 결과, 작은 요청에서는 Pure-Python `h11` 파서와 `FastAPI` 라우팅이, 큰 JSON 저장에서는 Python 재귀 타입 검사가 주된 비중을 차지했습니다. 이를 바탕으로 아래 선택을 적용하고 나머지는 후속 검토로 분리했습니다.
+
+- **HTTP 파서는 `httptools` 적용, 이벤트 루프는 표준 `asyncio` 유지:** `requirements-dev.txt`에 C(`llhttp`) 기반 `httptools`를 추가해 `uvicorn`의 요청 파싱과 응답 조립 비용을 줄였습니다. 반면 `uvloop`는 단건(`C=1`) 기준 표준 `asyncio` 자체 오버헤드가 작고 Windows를 공식 지원하지 않아 변경하지 않았습니다.
+- **HTTP(JSON 해석) 입력 전제로 중복 재귀 검증 제거:** `app.py`의 `request.json()`을 거친 객체에는 `tuple`·비문자열 `dict` 키가 생기지 않으므로, `MiniRedis.set`의 `_json_content_supported` Python 재귀 검사를 제거했습니다. `NaN`·무한대·순환 참조·직렬화 불가 객체는 크기 측정용 `json.dumps(..., allow_nan=False)` 경로에서 계속 거절하며, 직접 호출 전용 `tuple`·비문자열 키 거절 계약은 제외해 테스트·명세를 동기화했습니다.
+- **후속 검토 분리:** `app.py`가 `Pydantic`·`Depends()`·`/docs`를 쓰지 않지만 합의된 프레임워크 계약 유지를 위해 `FastAPI`는 그대로 두었으며, `Starlette`/순수 ASGI 전환·`Granian` 비교·`orjson` 검토는 별도 분석 기록과 GitHub 이슈(#9~#12)로 남겼습니다.
+
 ## 검증 결과
 
 ### 기능 테스트
 
-2026-11-15 현재 작업 환경에서 `.venv/bin/python -m pytest tests/ -q`를 실행한 결과 **625개 통과, 38개 건너뜀, 경고 1개**였습니다. 건너뛴 항목에는 반복 횟수와 시간 한도를 지정해야 하는 실제 TCP 동시 요청 8개, 외부 JMeter·MySQL 또는 비밀 파일 설정이 필요한 검증이 포함됩니다. 건너뛴 항목을 통과로 계산하지 않습니다.
+`perf/request-breakdown` 브랜치에서 `.venv/bin/python -m pytest -q`를 실행한 결과 **623개 통과, 38개 건너뜀, 경고 1개**였고, 실제 TCP 통합 테스트(`test_http_integration.py`, `test_ttl_http_integration.py`) **41개 모두 통과**했습니다. 건너뛴 항목에는 반복 횟수와 시간 한도를 지정해야 하는 실제 TCP 동시 요청 8개, 외부 JMeter·MySQL 또는 비밀 파일 설정이 필요한 검증이 포함됩니다. 건너뛴 항목을 통과로 계산하지 않습니다.
 
 기능 테스트는 저장·조회·삭제와 입력 경계, 증감과 조건 검사, TTL 경계와 정리, HTTP 요청 처리를 확인합니다. 날씨 시나리오는 가짜 원본의 호출 횟수를 통해 유효한 응답 재사용과 만료·수동 삭제 이후 재조회를 확인합니다. 이전에 별도 조건으로 실행한 TCP 동시 요청과 성능 시험은 아래 기록에서 확인할 수 있습니다.
 
@@ -112,6 +120,15 @@ HTTP는 JSON 해석과 필수 필드 확인, 저장소 호출과 응답 생성�
 별도 실험에서는 MySQL을 제외하고 Flask와 FastAPI 구성, TTL 구현 전후를 비교했습니다. 카운터·수동 무효화 수명주기·만료 키가 쌓인 상황을 합쳐 **140회, 1,400,000건 모두 성공**했고 최종 상태 확인을 통과했습니다. 이 결과는 MySQL 대비 성능이나 날씨 원본 호출을 포함한 성능이 아닙니다. 서버 구성과 연결 처리 방식이 달라 순수 프레임워크 성능으로도 해석하지 않습니다.
 
 상세 조건·측정값·실패 이력·한계는 [성능 실행 기록](resc/scenario_03_performance/03-performance-test-worklog.md), [이전 비교 집계](resc/scenario_03_performance/03-performance-results.json), [서버 구성 비교 집계](resc/scenario_03_performance/03-stack-comparison-results.json)를 참고합니다.
+
+### 1요청 구간 분석 및 선택 적용 후 측정
+
+`perf/request-breakdown` 브랜치에서는 Raw Socket keep-alive(`TCP_NODELAY`) 기준으로 1요청 구간별 지연을 별도 측정했습니다.
+
+- **`_json_content_supported` 제거:** `PUT large (~16KB)` 단건 RTT 중앙값이 `820.4 µs → 511.7 µs`(-37.6%)로 줄었습니다.
+- **`h11` → `httptools==0.9.0` 교체 (`asyncio` 유지):** `GET small` 단건 `206.0 µs → 121.1 µs`(-41.2%), 동시성 `C=50`(`N=5,000`) 처리량이 `5,051.9 → 7,813.3건/초`(+54.7%)로 증가했습니다.
+
+이 수치는 JMeter 5회 반복 캠페인이 아니라 별도 로컬 프로파일링 스크립트 측정이며, 기존 `h11 + asyncio` 기준선과 조건을 구분해 [1요청 구간 분석 기록](resc/scenario_03_performance/03-request-breakdown-analysis.md)에 정리했습니다.
 
 ## 실행과 사용
 
@@ -159,7 +176,7 @@ TCP 동시 요청 테스트는 실행자가 `COUNTER_TEST_REPEAT`와 `COUNTER_TE
 - 메모리 전용이며 영속화·재시작 복구를 구현하지 않았습니다. 결제·재고처럼 데이터 유실을 허용할 수 없는 작업의 DB 대체재로 사용할 수 없습니다.
 - 단일 이벤트 루프·단일 프로세스의 개발 서버입니다. 다중 프로세스·스레드 안전성, 운영 배포와 장애 복구는 보장하지 않습니다.
 - 테스트에서 가짜 원본을 사용했으며 실제 날씨 API 연동, 원본 장애, 동시 캐시 미스는 검증하지 않았습니다.
-- 실제 Redis와의 성능 비교, 현재 FastAPI 구현과 MySQL의 동일 조건 재측정, 계측 영향과 지연 원인별 비용은 검증하지 않았습니다.
+- 실제 Redis 서버(C 구현)와의 성능 비교, 현재 FastAPI 구현과 MySQL의 동일 조건 재측정, JMeter 계측 영향은 검증하지 않았습니다. (1요청 구간 분해와 동일 Python `asyncio` 위 최소 RESP2 대조는 별도 분석 스크립트로 측정했습니다.)
 - 전체 저장량 제한, 메모리 부족과 보안·인증은 구현 또는 검증 범위에 포함되지 않습니다.
 
 ## 관련 문서
@@ -167,6 +184,6 @@ TCP 동시 요청 테스트는 실행자가 `COUNTER_TEST_REPEAT`와 `COUNTER_TE
 - [과제 요구사항](resc/phase.md)
 - [저장소 시나리오](resc/scenario_01_storage/01-storage-scenario.md) · [TTL 계약](resc/scenario_01_storage/01-ttl-contract.md)
 - [동시 카운터 합의 및 테스트](resc/scenario_02_concurrent_counter/02-concurrent-counter-integrated-review.md)
-- [성능 비교 시나리오](resc/scenario_03_performance/03-performance-scenario.md) · [실행 기록](resc/scenario_03_performance/03-performance-test-worklog.md)
+- [성능 비교 시나리오](resc/scenario_03_performance/03-performance-scenario.md) · [실행 기록](resc/scenario_03_performance/03-performance-test-worklog.md) · [1요청 구간 분석 기록](resc/scenario_03_performance/03-request-breakdown-analysis.md)
 - [날씨 응답 재사용 시나리오](resc/scenario_04_response_cache/04-response-cache-scenario.md)
 - [REST API 명세](rest-api.md)
