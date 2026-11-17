@@ -16,3 +16,13 @@ __pycache__/
 
 # Local performance evidence (summaries stay in resc/)
 tests/scenario_03_performance/results/
+
+# Local random stress artifacts
+stress-results/
+
+# Hypothesis example database
+.hypothesis/
+
+# mutmut working files
+mutants/
+.mutmut-cache

@@ -179,6 +179,24 @@ def test_t1_25_empty_ttl_set_tick_does_not_sample():
     assert_ttl_invariants(store)
 
 
+def test_t1_30_empty_tick_stops_after_one_cycle():
+    """T1-25 보강: TTL 키가 없으면 cycle을 한 번만 호출하고 끝난다."""
+    sampler = FirstKSampler()
+    store, _ = build_store(sampler)
+    calls = []
+
+    def counting_cycle(now):
+        calls.append(now)
+        return 0, 0
+
+    store._active_expire_cycle = counting_cycle
+    store._maybe_active_expire()
+
+    assert len(calls) == 1
+    assert sampler.calls == []
+    assert_ttl_invariants(store)
+
+
 def test_t1_26_time_budget_stops_cycles():
     """T1-26: 1ms 예산과 0.2ms 단계 시계에서 5회 cycle 후 멈춘다."""
     sampler = FirstKSampler()

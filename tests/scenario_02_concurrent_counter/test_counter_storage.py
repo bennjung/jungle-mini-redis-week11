@@ -17,6 +17,14 @@ def prepared_store(initial):
     return store
 
 
+def test_single_character_key_is_valid_for_counter():
+    """키 길이 1은 유효하다. 하한 검사가 1바이트 키를 거절하면 안 된다."""
+    store = MiniRedis()
+    assert store.set("a", 0) == {"ok": True}
+    assert store.incr("a", 1) == {"ok": True, "value": 1}
+    assert store.decr("a", 1) == {"ok": True, "value": 0}
+
+
 @pytest.mark.parametrize("case_id,operation,initial,amount,bound,expected", SUCCESS_CASES,
                          ids=[item[0] for item in SUCCESS_CASES])
 def test_c01_success(case_id, operation, initial, amount, bound, expected):
