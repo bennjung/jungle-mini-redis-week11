@@ -16,9 +16,15 @@ import uvicorn
 
 from app import create_app
 from storage import MiniRedis
+from tests.response_helpers import check_raw_response
 
 BASE_MS = 1_700_000_000_000
 TTL_MS = 600_000
+
+
+def check_result(result, status, expected):
+    """call()이 돌려준 상태·Content-Type·본문을 공통 기준으로 확인한다."""
+    return check_raw_response(*result, status, expected)
 
 
 class FakeClock:
@@ -86,42 +92,51 @@ def test_ttl_endpoints_over_real_http(server):
     """PUT ttl → GET ttl → 만료 → expire/persist가 실제 TCP에서 동작한다."""
     call, clock = server
 
-    status, content_type, body = call(
-        "PUT", "/kv", body={"key": "ttl:one", "value": "hello", "ttl": TTL_MS}
+    check_result(
+        call("PUT", "/kv", body={"key": "ttl:one", "value": "hello", "ttl": TTL_MS}),
+        200,
+        {"ok": True},
     )
-    assert (status, content_type, body) == (200, "application/json", {"ok": True})
-    assert call("GET", "/kv/ttl", params={"key": "ttl:one"})[2] == {
-        "found": True,
-        "ttl": TTL_MS,
-    }
-    assert call("GET", "/kv", params={"key": "ttl:one"})[2] == {
-        "found": True,
-        "value": "hello",
-    }
+    check_result(
+        call("GET", "/kv/ttl", params={"key": "ttl:one"}),
+        200,
+        {"found": True, "ttl": TTL_MS},
+    )
+    check_result(
+        call("GET", "/kv", params={"key": "ttl:one"}),
+        200,
+        {"found": True, "value": "hello"},
+    )
 
     clock.advance(TTL_MS)
-    assert call("GET", "/kv", params={"key": "ttl:one"})[2] == {"found": False}
-    assert call("GET", "/kv/ttl", params={"key": "ttl:one"})[2] == {"found": False}
+    check_result(call("GET", "/kv", params={"key": "ttl:one"}), 200, {"found": False})
+    check_result(call("GET", "/kv/ttl", params={"key": "ttl:one"}), 200, {"found": False})
 
-    assert call(
-        "PUT", "/kv", body={"key": "ttl:two", "value": "hello"}
-    )[2] == {"ok": True}
-    assert call("POST", "/kv/expire", body={"key": "ttl:two", "ttl": 1_000})[2] == {
-        "found": True,
-        "ttl": 1_000,
-    }
-    assert call("GET", "/kv/ttl", params={"key": "ttl:two"})[2] == {
-        "found": True,
-        "ttl": 1_000,
-    }
-    assert call("POST", "/kv/persist", body={"key": "ttl:two"})[2] == {
-        "found": True,
-        "persisted": True,
-    }
-    assert call("GET", "/kv/ttl", params={"key": "ttl:two"})[2] == {
-        "found": True,
-        "ttl": -1,
-    }
+    check_result(
+        call("PUT", "/kv", body={"key": "ttl:two", "value": "hello"}),
+        200,
+        {"ok": True},
+    )
+    check_result(
+        call("POST", "/kv/expire", body={"key": "ttl:two", "ttl": 1_000}),
+        200,
+        {"found": True, "ttl": 1_000},
+    )
+    check_result(
+        call("GET", "/kv/ttl", params={"key": "ttl:two"}),
+        200,
+        {"found": True, "ttl": 1_000},
+    )
+    check_result(
+        call("POST", "/kv/persist", body={"key": "ttl:two"}),
+        200,
+        {"found": True, "persisted": True},
+    )
+    check_result(
+        call("GET", "/kv/ttl", params={"key": "ttl:two"}),
+        200,
+        {"found": True, "ttl": -1},
+    )
 
 
 def test_weather_invalidation_over_real_http(server):
@@ -137,9 +152,11 @@ def test_weather_invalidation_over_real_http(server):
         if body["found"]:
             return body["value"]
         origin_calls.append(key)
-        assert call(
-            "PUT", "/kv", body={"key": key, "value": response_text, "ttl": TTL_MS}
-        )[2] == {"ok": True}
+        check_result(
+            call("PUT", "/kv", body={"key": key, "value": response_text, "ttl": TTL_MS}),
+            200,
+            {"ok": True},
+        )
         return response_text
 
     assert read_through() == response_text
@@ -152,6 +169,10 @@ def test_weather_invalidation_over_real_http(server):
     assert read_through() == response_text
     assert len(origin_calls) == 2
 
-    assert call("DELETE", "/kv", params={"key": key})[2]["found"] is True
+    check_result(
+        call("DELETE", "/kv", params={"key": key}),
+        200,
+        {"found": True, "value": response_text},
+    )
     assert read_through() == response_text
     assert len(origin_calls) == 3

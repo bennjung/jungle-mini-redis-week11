@@ -1,6 +1,6 @@
 """TTL·증감 계약을 검증하는 참조 모델.
 
-property/state-machine 테스트와 저장소 랜덤 fuzz가 같은 모델을 쓴다.
+state-machine 테스트와 저장소 랜덤 fuzz가 같은 모델을 쓴다.
 """
 
 _MISSING = object()

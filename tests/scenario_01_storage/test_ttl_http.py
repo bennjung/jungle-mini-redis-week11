@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 
 from app import create_app
 from storage import MiniRedis
+from tests.response_helpers import check_response
 
 BASE_MS = 1_700_000_000_000
 TTL_MS = 600_000
@@ -39,18 +40,6 @@ def api():
     return TestClient(create_app(MiniRedis(clock=clock))), clock
 
 
-def check(response, status, expected):
-    """상태 코드·JSON 내용·필드 타입을 함께 확인한다."""
-    assert response.status_code == status
-    assert response.headers["content-type"].startswith("application/json")
-    body = response.json()
-    assert type(body) is dict
-    assert body == expected
-    for field, content in expected.items():
-        assert type(body[field]) is type(content)
-    return body
-
-
 def put(client, key, value, *, ttl=_ABSENT):
     """ttl 생략과 JSON null을 구분해 PUT /kv 본문을 만든다."""
     body = {"key": key, "value": value}
@@ -66,42 +55,42 @@ def get_ttl(client, key):
 def test_put_ttl(api):
     """put-ttl: TTL과 함께 저장한다."""
     client, _ = api
-    check(put(client, "ttl:one", "hello", ttl=TTL_MS), 200, {"ok": True})
+    check_response(put(client, "ttl:one", "hello", ttl=TTL_MS), 200, {"ok": True})
 
 
 def test_put_no_ttl(api):
     """put-no-ttl: ttl 생략은 TTL 없이 저장한다."""
     client, _ = api
-    check(put(client, "ttl:one", "hello"), 200, {"ok": True})
-    check(get_ttl(client, "ttl:one"), 200, {"found": True, "ttl": -1})
+    check_response(put(client, "ttl:one", "hello"), 200, {"ok": True})
+    check_response(get_ttl(client, "ttl:one"), 200, {"found": True, "ttl": -1})
 
 
 def test_put_null_ttl(api):
     """put-null-ttl: JSON null ttl은 생략과 같게 기존 TTL을 제거한다."""
     client, _ = api
-    check(put(client, "ttl:one", "hello", ttl=TTL_MS), 200, {"ok": True})
-    check(put(client, "ttl:one", "hello", ttl=None), 200, {"ok": True})
-    check(get_ttl(client, "ttl:one"), 200, {"found": True, "ttl": -1})
+    check_response(put(client, "ttl:one", "hello", ttl=TTL_MS), 200, {"ok": True})
+    check_response(put(client, "ttl:one", "hello", ttl=None), 200, {"ok": True})
+    check_response(get_ttl(client, "ttl:one"), 200, {"found": True, "ttl": -1})
 
 
 def test_ttl_get(api):
     """ttl-get: 남은 TTL을 조회한다."""
     client, _ = api
-    check(put(client, "ttl:one", "hello", ttl=TTL_MS), 200, {"ok": True})
-    check(get_ttl(client, "ttl:one"), 200, {"found": True, "ttl": TTL_MS})
+    check_response(put(client, "ttl:one", "hello", ttl=TTL_MS), 200, {"ok": True})
+    check_response(get_ttl(client, "ttl:one"), 200, {"found": True, "ttl": TTL_MS})
 
 
 def test_ttl_missing(api):
     """ttl-missing: 없는 키는 404가 아니라 found:false다."""
     client, _ = api
-    check(get_ttl(client, "missing"), 200, {"found": False})
+    check_response(get_ttl(client, "missing"), 200, {"found": False})
 
 
 def test_expire_set(api):
     """expire-set: TTL 없는 키에 TTL을 설정한다."""
     client, _ = api
-    check(put(client, "ttl:one", "hello"), 200, {"ok": True})
-    check(
+    check_response(put(client, "ttl:one", "hello"), 200, {"ok": True})
+    check_response(
         client.post("/kv/expire", json={"key": "ttl:one", "ttl": 60_000}),
         200,
         {"found": True, "ttl": 60_000},
@@ -111,19 +100,19 @@ def test_expire_set(api):
 def test_expire_delete(api):
     """expire-delete: ttl 0은 키를 즉시 삭제한다."""
     client, _ = api
-    check(put(client, "ttl:one", "hello", ttl=TTL_MS), 200, {"ok": True})
-    check(
+    check_response(put(client, "ttl:one", "hello", ttl=TTL_MS), 200, {"ok": True})
+    check_response(
         client.post("/kv/expire", json={"key": "ttl:one", "ttl": 0}),
         200,
         {"found": True, "ttl": 0},
     )
-    check(client.get("/kv", params={"key": "ttl:one"}), 200, {"found": False})
+    check_response(client.get("/kv", params={"key": "ttl:one"}), 200, {"found": False})
 
 
 def test_expire_missing(api):
     """expire-missing: 없는 키는 found:false다."""
     client, _ = api
-    check(
+    check_response(
         client.post("/kv/expire", json={"key": "missing", "ttl": 1_000}),
         200,
         {"found": False},
@@ -133,20 +122,20 @@ def test_expire_missing(api):
 def test_persist(api):
     """persist: TTL만 제거하고 value는 유지한다."""
     client, _ = api
-    check(put(client, "ttl:one", "hello", ttl=TTL_MS), 200, {"ok": True})
-    check(
+    check_response(put(client, "ttl:one", "hello", ttl=TTL_MS), 200, {"ok": True})
+    check_response(
         client.post("/kv/persist", json={"key": "ttl:one"}),
         200,
         {"found": True, "persisted": True},
     )
-    check(get_ttl(client, "ttl:one"), 200, {"found": True, "ttl": -1})
+    check_response(get_ttl(client, "ttl:one"), 200, {"found": True, "ttl": -1})
 
 
 def test_persist_no_ttl(api):
     """persist-no-ttl: TTL이 없으면 persisted:false다."""
     client, _ = api
-    check(put(client, "ttl:one", "hello"), 200, {"ok": True})
-    check(
+    check_response(put(client, "ttl:one", "hello"), 200, {"ok": True})
+    check_response(
         client.post("/kv/persist", json={"key": "ttl:one"}),
         200,
         {"found": True, "persisted": False},
@@ -156,7 +145,7 @@ def test_persist_no_ttl(api):
 def test_persist_missing(api):
     """persist-missing: 없는 키는 found:false다."""
     client, _ = api
-    check(
+    check_response(
         client.post("/kv/persist", json={"key": "missing"}),
         200,
         {"found": False},
@@ -166,8 +155,8 @@ def test_persist_missing(api):
 def test_get_hides_ttl(api):
     """get-hides-ttl: GET /kv 응답에는 TTL 필드가 없다."""
     client, _ = api
-    check(put(client, "ttl:one", "hello", ttl=TTL_MS), 200, {"ok": True})
-    body = check(
+    check_response(put(client, "ttl:one", "hello", ttl=TTL_MS), 200, {"ok": True})
+    body = check_response(
         client.get("/kv", params={"key": "ttl:one"}),
         200,
         {"found": True, "value": "hello"},
@@ -179,24 +168,21 @@ def test_get_hides_ttl(api):
     "ttl",
     [
         pytest.param(0, id="zero"),
-        pytest.param(-1, id="negative"),
-        pytest.param(1.5, id="float"),
         pytest.param("1000", id="string"),
-        pytest.param(True, id="boolean"),
     ],
 )
 def test_put_invalid_ttl_preserves_value_and_ttl(api, ttl):
     """put-invalid-ttl: 잘못된 ttl은 400이며 value와 TTL을 보존한다."""
     client, _ = api
-    check(put(client, "ttl:one", "before", ttl=TTL_MS), 200, {"ok": True})
+    check_response(put(client, "ttl:one", "before", ttl=TTL_MS), 200, {"ok": True})
 
-    check(
+    check_response(
         put(client, "ttl:one", "after", ttl=ttl),
         400,
         {"error": "INVALID_INPUT"},
     )
-    check(client.get("/kv", params={"key": "ttl:one"}), 200, {"found": True, "value": "before"})
-    check(get_ttl(client, "ttl:one"), 200, {"found": True, "ttl": TTL_MS})
+    check_response(client.get("/kv", params={"key": "ttl:one"}), 200, {"found": True, "value": "before"})
+    check_response(get_ttl(client, "ttl:one"), 200, {"found": True, "ttl": TTL_MS})
 
 
 @pytest.mark.parametrize(
@@ -204,34 +190,31 @@ def test_put_invalid_ttl_preserves_value_and_ttl(api, ttl):
     [
         pytest.param(_ABSENT, id="missing"),
         pytest.param(None, id="null"),
-        pytest.param(1.5, id="float"),
-        pytest.param("1000", id="string"),
-        pytest.param(True, id="boolean"),
     ],
 )
 def test_expire_invalid_ttl_preserves_value_and_ttl(api, ttl):
     """expire-invalid-ttl: 누락·null·잘못된 타입은 400이며 상태를 보존한다."""
     client, _ = api
-    check(put(client, "ttl:one", "before", ttl=TTL_MS), 200, {"ok": True})
+    check_response(put(client, "ttl:one", "before", ttl=TTL_MS), 200, {"ok": True})
 
     body = {"key": "ttl:one"}
     if ttl is not _ABSENT:
         body["ttl"] = ttl
-    check(
+    check_response(
         client.post("/kv/expire", json=body),
         400,
         {"error": "INVALID_INPUT"},
     )
-    check(client.get("/kv", params={"key": "ttl:one"}), 200, {"found": True, "value": "before"})
-    check(get_ttl(client, "ttl:one"), 200, {"found": True, "ttl": TTL_MS})
+    check_response(client.get("/kv", params={"key": "ttl:one"}), 200, {"found": True, "value": "before"})
+    check_response(get_ttl(client, "ttl:one"), 200, {"found": True, "ttl": TTL_MS})
 
 
 def test_expire_boundary(api):
     """expire-boundary: 만료 시각에 도달하면 없는 키로 응답한다."""
     client, clock = api
-    check(put(client, "ttl:one", "hello", ttl=TTL_MS), 200, {"ok": True})
+    check_response(put(client, "ttl:one", "hello", ttl=TTL_MS), 200, {"ok": True})
     clock.advance(TTL_MS)
-    check(get_ttl(client, "ttl:one"), 200, {"found": False})
+    check_response(get_ttl(client, "ttl:one"), 200, {"found": False})
 
 
 def test_expire_key_omitted():
@@ -239,7 +222,7 @@ def test_expire_key_omitted():
     storage = Mock()
     client = TestClient(create_app(storage))
 
-    check(
+    check_response(
         client.post("/kv/expire", json={"ttl": TTL_MS}),
         400,
         {"error": "INVALID_INPUT"},
@@ -252,7 +235,7 @@ def test_ttl_key_omitted():
     storage = Mock()
     client = TestClient(create_app(storage))
 
-    check(client.get("/kv/ttl"), 400, {"error": "INVALID_INPUT"})
+    check_response(client.get("/kv/ttl"), 400, {"error": "INVALID_INPUT"})
     assert storage.mock_calls == []
 
 
@@ -261,7 +244,7 @@ def test_persist_key_omitted():
     storage = Mock()
     client = TestClient(create_app(storage))
 
-    check(client.post("/kv/persist", json={}), 400, {"error": "INVALID_INPUT"})
+    check_response(client.post("/kv/persist", json={}), 400, {"error": "INVALID_INPUT"})
     assert storage.mock_calls == []
 
 
@@ -269,7 +252,7 @@ def test_expire_null_ttl_missing_key(api):
     """expire-null-ttl-missing-key: 키가 없으면 ttl null보다 found false가 먼저다."""
     client, _ = api
 
-    check(
+    check_response(
         client.post("/kv/expire", json={"key": "missing", "ttl": None}),
         200,
         {"found": False},

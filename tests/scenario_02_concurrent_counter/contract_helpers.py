@@ -7,35 +7,19 @@ from fastapi.testclient import TestClient
 from app import create_app
 from storage import MiniRedis
 from tests.scenario_01_storage.storage_helpers import snapshot
+from tests.response_helpers import (
+    assert_json as assert_json_value,
+    check_response,
+)
 
 
 def assert_json(actual, expected):
-    """불리언과 숫자를 구분하고 중첩 JSON 내용과 필드 집합을 검사한다."""
-    if type(expected) in (int, float):
-        assert type(actual) in (int, float), (actual, expected)
-        assert actual == expected
-    else:
-        assert type(actual) is type(expected), (actual, expected)
-        if isinstance(expected, dict):
-            assert actual.keys() == expected.keys(), (actual, expected)
-            for key in expected:
-                assert_json(actual[key], expected[key])
-        elif isinstance(expected, list):
-            assert len(actual) == len(expected)
-            for item, wanted in zip(actual, expected):
-                assert_json(item, wanted)
-        else:
-            assert actual == expected
+    """counter·JSON 계약: int와 float를 JSON 숫자로 함께 본다."""
+    assert_json_value(actual, expected, numbers="json")
 
 
 def check(response, status, expected):
-    assert response.status_code == status, (
-        "HTTP 상태 불일치", response.status_code, status, response.text[:300],
-    )
-    assert response.headers["content-type"].startswith("application/json"), (
-        "JSON 응답 아님", response.headers.get("content-type"),
-    )
-    assert_json(response.json(), expected)
+    return check_response(response, status, expected, numbers="json")
 
 
 def state(store):
