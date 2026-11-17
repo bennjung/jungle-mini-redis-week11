@@ -62,9 +62,35 @@ class MiniRedis:
         self._expires = {}
         self._ttl_keys = []
         self._ttl_pos = {}
+        self._locks = {}
+        self._lock_keys = []
+        self._lock_pos = {}
         self._clock = clock if clock is not None else lambda: int(time.time() * 1000)
         self._sampler = sampler if sampler is not None else random.sample
         self._monotonic = monotonic if monotonic is not None else time.monotonic
+
+    @staticmethod
+    def _valid_short_text(value):
+        """1~256 UTF-8 바이트 문자열인지 검사한다."""
+        if not isinstance(value, str):
+            return False
+        try:
+            return 1 <= len(value.encode("utf-8")) <= 256
+        except UnicodeEncodeError:
+            return False
+
+    @staticmethod
+    def _index_add(keys, pos, key):
+        pos[key] = len(keys)
+        keys.append(key)
+
+    @staticmethod
+    def _index_remove(keys, pos, key):
+        index = pos.pop(key)
+        last = keys.pop()
+        if index < len(keys):
+            keys[index] = last
+            pos[last] = index
 
     def _now_ms(self):
         """현재 시각을 정수 epoch ms로 반환한다."""
@@ -73,25 +99,43 @@ class MiniRedis:
     def _set_ttl(self, key, expiry_ms):
         """절대 만료 시각을 기록한다. TTL이 없던 키면 인덱스에 추가한다."""
         if key not in self._expires:
-            self._ttl_pos[key] = len(self._ttl_keys)
-            self._ttl_keys.append(key)
+            self._index_add(self._ttl_keys, self._ttl_pos, key)
         self._expires[key] = expiry_ms
 
     def _clear_ttl(self, key):
         """TTL 구조에서만 제거하고 value는 남긴다."""
         if key not in self._expires:
             return
-        index = self._ttl_pos.pop(key)
-        last = self._ttl_keys.pop()
-        if index < len(self._ttl_keys):
-            self._ttl_keys[index] = last
-            self._ttl_pos[last] = index
+        self._index_remove(self._ttl_keys, self._ttl_pos, key)
         del self._expires[key]
 
     def _drop_key(self, key):
         """네 구조에서 키를 제거한다. TTL 구조 제거의 유일한 경로다."""
         self._data.pop(key, None)
         self._clear_ttl(key)
+
+    def _set_lock(self, key, token, expiry_ms):
+        """락 소유 토큰과 절대 만료 시각을 기록한다."""
+        if key not in self._locks:
+            self._index_add(self._lock_keys, self._lock_pos, key)
+        self._locks[key] = (token, expiry_ms)
+
+    def _clear_lock(self, key):
+        """락 구조에서 키를 제거한다."""
+        if key not in self._locks:
+            return
+        self._index_remove(self._lock_keys, self._lock_pos, key)
+        del self._locks[key]
+
+    def _lazy_expire_lock(self, key, now_ms):
+        """락이 만료됐으면 제거하고 만료 여부를 반환한다."""
+        entry = self._locks.get(key)
+        if entry is None:
+            return False
+        if now_ms < entry[1]:
+            return False
+        self._clear_lock(key)
+        return True
 
     def _lazy_expire(self, key, now_ms=None):
         """그 키가 만료됐으면 제거하고, 만료 여부를 반환한다.
@@ -108,21 +152,25 @@ class MiniRedis:
         return True
 
     def _maybe_active_expire(self):
-        """타이머 tick. 시간 예산 안에서 같은 시점으로 active 사이클을 반복한다."""
+        """타이머 tick. 시간 예산 안에서 TTL 키와 락 키를 active 정리한다."""
         now = self._now_ms()
         deadline = self._monotonic() + self._ACTIVE_TIME_BUDGET_S
-        cycles = 0
+        cycles = self._run_active_cycles(self._active_expire_cycle, now, deadline, 0)
+        if self._lock_keys and cycles < self._ACTIVE_MAX_CYCLES and self._monotonic() < deadline:
+            self._run_active_cycles(self._active_lock_cycle, now, deadline, cycles)
+
+    def _run_active_cycles(self, cycle_fn, now_ms, deadline, cycles):
         while cycles < self._ACTIVE_MAX_CYCLES:
-            expired, size = self._active_expire_cycle(now)
+            expired, size = cycle_fn(now_ms)
             cycles += 1
             if size == 0 or expired * 4 < size:
                 break
             if self._monotonic() >= deadline:
                 break
+        return cycles
 
-    def _active_expire_cycle(self, now_ms):
-        """TTL 키에서 최대 20개를 뽑아 만료된 키를 제거한다."""
-        keys = self._ttl_keys
+    def _sample_and_expire(self, keys, get_expiry, drop_fn, now_ms):
+        """대상 키 목록에서 최대 20개를 뽑아 만료된 항목을 제거한다."""
         k = min(self._ACTIVE_SAMPLE_SIZE, len(keys))
         if k == 0:
             return 0, 0
@@ -133,13 +181,27 @@ class MiniRedis:
 
         expired = 0
         for key in sample:
-            expiry_ms = self._expires.get(key)
-            # 표본을 뽑은 뒤 TTL이 갱신됐거나 키가 사라졌으면 삭제하지 않는다.
+            expiry_ms = get_expiry(key)
             if expiry_ms is None or now_ms < expiry_ms:
                 continue
-            self._drop_key(key)
+            drop_fn(key)
             expired += 1
         return expired, len(sample)
+
+    def _active_expire_cycle(self, now_ms):
+        """TTL 키에서 최대 20개를 뽑아 만료된 키를 제거한다."""
+        return self._sample_and_expire(
+            self._ttl_keys, self._expires.get, self._drop_key, now_ms
+        )
+
+    def _active_lock_cycle(self, now_ms):
+        """락 키에서 최대 20개를 뽑아 만료된 락을 제거한다."""
+        return self._sample_and_expire(
+            self._lock_keys,
+            lambda k: self._locks[k][1] if k in self._locks else None,
+            self._clear_lock,
+            now_ms,
+        )
 
     def set(self, key, value, ttl=None):
         """검증을 마친 뒤 지정한 키를 덮어쓰고 선택한 TTL을 적용한다."""
@@ -332,3 +394,35 @@ class MiniRedis:
 
         self._data[key] = result
         return {"ok": True, "value": result}
+
+    def acquire(self, key, token, ttl):
+        """키별 원자적 락을 획득하거나 동일 토큰의 TTL을 연장한다."""
+        if (
+            not self._valid_short_text(key)
+            or not self._valid_short_text(token)
+            or isinstance(ttl, bool)
+            or not isinstance(ttl, int)
+            or ttl <= 0
+        ):
+            return {"error": "INVALID_INPUT"}
+
+        now = self._now_ms()
+        self._lazy_expire_lock(key, now)
+        entry = self._locks.get(key)
+        if entry is None or entry[0] == token:
+            self._set_lock(key, token, now + ttl)
+            return {"acquired": True}
+        return {"error": "LOCK_BUSY", "retry_after_ms": entry[1] - now}
+
+    def release(self, key, token):
+        """소유 토큰이 일치할 때만 락을 해제한다."""
+        if not self._valid_short_text(key) or not self._valid_short_text(token):
+            return {"error": "INVALID_INPUT"}
+
+        now = self._now_ms()
+        self._lazy_expire_lock(key, now)
+        entry = self._locks.get(key)
+        if entry is None or entry[0] != token:
+            return {"released": False}
+        self._clear_lock(key)
+        return {"released": True}

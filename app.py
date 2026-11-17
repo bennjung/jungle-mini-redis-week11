@@ -18,6 +18,7 @@ ERROR_STATUS = {
     "NOT_FOUND": 404,
     "OUT_OF_RANGE": 422,
     "CONDITION_NOT_MET": 409,
+    "LOCK_BUSY": 409,
 }
 
 # 증감 연산별로 허용하는 선택 조건 필드 하나를 정한다.
@@ -193,6 +194,34 @@ def create_app(storage):
     @app.post("/kv/decr")
     async def decr_kv(request: Request):
         return await counter_kv(request, "decr")
+
+    @app.post("/kv/lock/acquire")
+    async def acquire_lock(request: Request):
+        body = await _json_body(request)
+        if (
+            body is _INVALID_BODY
+            or not isinstance(body, dict)
+            or set(body) != {"key", "token", "ttl"}
+        ):
+            return JSONResponse({"error": "INVALID_INPUT"}, status_code=400)
+        result = storage.acquire(body["key"], body["token"], body["ttl"])
+        return JSONResponse(
+            result, status_code=ERROR_STATUS.get(result.get("error"), 200)
+        )
+
+    @app.post("/kv/lock/release")
+    async def release_lock(request: Request):
+        body = await _json_body(request)
+        if (
+            body is _INVALID_BODY
+            or not isinstance(body, dict)
+            or set(body) != {"key", "token"}
+        ):
+            return JSONResponse({"error": "INVALID_INPUT"}, status_code=400)
+        result = storage.release(body["key"], body["token"])
+        return JSONResponse(
+            result, status_code=ERROR_STATUS.get(result.get("error"), 200)
+        )
 
     return app
 
