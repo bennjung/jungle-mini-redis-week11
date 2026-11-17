@@ -1,0 +1,90 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="330" viewBox="0 0 880 330" role="img" aria-label="병목 분석 및 HTTP 스택 개선">
+  <rect width="880" height="330" rx="12" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.5"/>
+  <text x="28" y="36" font-family="'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="17" font-weight="700" fill="#0f172a">병목 분석(HTTP 직렬화) 및 서버 스택 개선(Flask → FastAPI)</text>
+
+  <!-- Left Panel: Bottleneck (Log Scale) -->
+  <rect x="28" y="56" width="410" height="250" rx="8" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="44" y="80" font-family="'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="13.5" font-weight="700" fill="#0f172a">1) 구간별 처리량 차이 (로그 스케일, req/s)</text>
+
+  <line x1="150" y1="98" x2="150" y2="275" stroke="#cbd5e1"/>
+  <line x1="210" y1="98" x2="210" y2="275" stroke="#e2e8f0" stroke-dasharray="3,3"/>
+  <line x1="270" y1="98" x2="270" y2="275" stroke="#e2e8f0" stroke-dasharray="3,3"/>
+  <line x1="330" y1="98" x2="330" y2="275" stroke="#e2e8f0" stroke-dasharray="3,3"/>
+  <text x="150" y="290" text-anchor="middle" font-family="'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="10.5" fill="#64748b">100</text>
+  <text x="210" y="290" text-anchor="middle" font-family="'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="10.5" fill="#64748b">1k</text>
+  <text x="270" y="290" text-anchor="middle" font-family="'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="10.5" fill="#64748b">10k</text>
+  <text x="330" y="290" text-anchor="middle" font-family="'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="10.5" fill="#64748b">100k</text>
+
+  <!-- Read -->
+  <text x="142" y="120" text-anchor="end" font-family="'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="11" font-weight="600" fill="#1e293b">조회 · MiniRedis</text>
+  <rect x="150" y="106" width="208.8" height="16" rx="3" fill="#2563eb"/>
+  <text x="364.8" y="118" font-family="'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="11" font-weight="700" fill="#1d4ed8">301,544</text>
+
+  <text x="142" y="144" text-anchor="end" font-family="'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="11" fill="#475569">조회 · SQLite</text>
+  <rect x="150" y="130" width="139.8" height="16" rx="3" fill="#94a3b8"/>
+  <text x="295.8" y="142" font-family="'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="11" fill="#475569">21,382</text>
+
+  <text x="142" y="168" text-anchor="end" font-family="'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="11" font-weight="600" fill="#b91c1c">조회 · HTTP</text>
+  <rect x="150" y="154" width="43.0" height="16" rx="3" fill="#ef4444"/>
+  <text x="199.0" y="166" font-family="'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="11" font-weight="700" fill="#b91c1c">521 (병목)</text>
+
+  <!-- Book -->
+  <text x="142" y="204" text-anchor="end" font-family="'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="11" font-weight="600" fill="#1e293b">예매 · MiniRedis</text>
+  <rect x="150" y="190" width="196.1" height="16" rx="3" fill="#2563eb"/>
+  <text x="352.1" y="202" font-family="'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="11" font-weight="700" fill="#1d4ed8">185,230</text>
+
+  <text x="142" y="228" text-anchor="end" font-family="'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="11" fill="#475569">예매 · SQLite</text>
+  <rect x="150" y="214" width="141.3" height="16" rx="3" fill="#94a3b8"/>
+  <text x="297.3" y="226" font-family="'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="11" fill="#475569">22,615</text>
+
+  <text x="142" y="252" text-anchor="end" font-family="'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="11" font-weight="600" fill="#b91c1c">예매 · HTTP</text>
+  <rect x="150" y="238" width="45.3" height="16" rx="3" fill="#ef4444"/>
+  <text x="201.3" y="250" font-family="'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="11" font-weight="700" fill="#b91c1c">570 (병목)</text>
+
+  <!-- Right Panel: Flask vs FastAPI -->
+  <rect x="454" y="56" width="398" height="250" rx="8" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="470" y="80" font-family="'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="13.5" font-weight="700" fill="#0f172a">2) HTTP 스택 전환: Flask → FastAPI (req/s)</text>
+
+  <!-- Legend -->
+  <rect x="688" y="68" width="12" height="12" rx="2" fill="#94a3b8"/>
+  <text x="705" y="78" font-family="'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="11" fill="#475569">Flask</text>
+  <rect x="752" y="68" width="12" height="12" rx="2" fill="#0d9488"/>
+  <text x="769" y="78" font-family="'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="11" font-weight="600" fill="#0f766e">FastAPI</text>
+
+  <line x1="498" y1="260" x2="836" y2="260" stroke="#cbd5e1"/>
+  <line x1="498" y1="198" x2="836" y2="198" stroke="#e2e8f0" stroke-dasharray="3,3"/>
+  <line x1="498" y1="136" x2="836" y2="136" stroke="#e2e8f0" stroke-dasharray="3,3"/>
+  <text x="492" y="264" text-anchor="end" font-family="'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="10.5" fill="#64748b">0</text>
+  <text x="492" y="202" text-anchor="end" font-family="'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="10.5" fill="#64748b">2k</text>
+  <text x="492" y="140" text-anchor="end" font-family="'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="10.5" fill="#64748b">4k</text>
+
+  
+    <rect x="528" y="216.6" width="26" height="43.4" rx="3" fill="#94a3b8"/>
+    <text x="541" y="211.6" text-anchor="middle" font-family="'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="10" fill="#475569">1,395</text>
+    <rect x="558" y="209.6" width="26" height="50.4" rx="3" fill="#0d9488"/>
+    <text x="571" y="204.6" text-anchor="middle" font-family="'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="10.5" font-weight="700" fill="#0f766e">1,620</text>
+    <text x="556" y="276" text-anchor="middle" font-family="'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="11.5" font-weight="600" fill="#1e293b">c=1</text>
+    <text x="556" y="291" text-anchor="middle" font-family="'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="10.5" font-weight="700" fill="#0f766e">(1.16x)</text>
+    
+    <rect x="610" y="187.3" width="26" height="72.7" rx="3" fill="#94a3b8"/>
+    <text x="623" y="182.3" text-anchor="middle" font-family="'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="10" fill="#475569">2,335</text>
+    <rect x="640" y="141.4" width="26" height="118.6" rx="3" fill="#0d9488"/>
+    <text x="653" y="136.4" text-anchor="middle" font-family="'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="10.5" font-weight="700" fill="#0f766e">3,813</text>
+    <text x="638" y="276" text-anchor="middle" font-family="'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="11.5" font-weight="600" fill="#1e293b">c=10</text>
+    <text x="638" y="291" text-anchor="middle" font-family="'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="10.5" font-weight="700" fill="#0f766e">(1.63x)</text>
+    
+    <rect x="692" y="190.2" width="26" height="69.8" rx="3" fill="#94a3b8"/>
+    <text x="705" y="185.2" text-anchor="middle" font-family="'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="10" fill="#475569">2,245</text>
+    <rect x="722" y="142.2" width="26" height="117.8" rx="3" fill="#0d9488"/>
+    <text x="735" y="137.2" text-anchor="middle" font-family="'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="10.5" font-weight="700" fill="#0f766e">3,786</text>
+    <text x="720" y="276" text-anchor="middle" font-family="'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="11.5" font-weight="600" fill="#1e293b">c=50</text>
+    <text x="720" y="291" text-anchor="middle" font-family="'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="10.5" font-weight="700" fill="#0f766e">(1.69x)</text>
+    
+    <rect x="774" y="189.9" width="26" height="70.1" rx="3" fill="#94a3b8"/>
+    <text x="787" y="184.9" text-anchor="middle" font-family="'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="10" fill="#475569">2,254</text>
+    <rect x="804" y="144.4" width="26" height="115.6" rx="3" fill="#0d9488"/>
+    <text x="817" y="139.4" text-anchor="middle" font-family="'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="10.5" font-weight="700" fill="#0f766e">3,715</text>
+    <text x="802" y="276" text-anchor="middle" font-family="'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="11.5" font-weight="600" fill="#1e293b">c=100</text>
+    <text x="802" y="291" text-anchor="middle" font-family="'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="10.5" font-weight="700" fill="#0f766e">(1.65x)</text>
+    
+</svg>

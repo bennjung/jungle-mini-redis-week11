@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 330" width="760" height="330" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif">
+  <rect width="760" height="330" rx="12" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
+
+  <!-- Header -->
+  <text x="28" y="34" font-size="16" font-weight="700" fill="#1f2328">2. 병목 구간 분석 및 파서·검증 개선 효과 (perf/request-breakdown 실측)</text>
+  <text x="28" y="54" font-size="12" fill="#656d76">저장소 자체는 ~2.4 µs(1.9%)에 불과하며, 앞단 HTTP 파서(h11→httptools)와 직렬화가 지연을 지배</text>
+
+  <!-- Top Section: Stacked horizontal breakdown of 1 GET small request (125.9 µs) -->
+  <text x="28" y="84" font-size="13" font-weight="700" fill="#1f2328">단일 GET 요청(125.9 µs) 구간별 차지 시간 (httptools + asyncio)</text>
+
+  <!-- Total width 704px (x=28..732): 60.4% = 425.2px, 37.7% = 265.4px, 1.9% = 13.4px -->
+  <rect x="28" y="96" width="425.2" height="30" rx="4" fill="#cf222e" opacity="0.85"/>
+  <rect x="454.2" y="96" width="264.4" height="30" rx="4" fill="#0969da" opacity="0.85"/>
+  <rect x="719.6" y="96" width="12.4" height="30" rx="2" fill="#1a7f37"/>
+
+  <text x="240" y="115" font-size="12" font-weight="700" fill="#ffffff" text-anchor="middle">TCP + uvicorn + httptools (75.9 µs · 60.4%)</text>
+  <text x="586" y="115" font-size="12" font-weight="700" fill="#ffffff" text-anchor="middle">FastAPI + JSON (47.5 µs · 37.7%)</text>
+
+  <!-- Callout for 1.9% MiniRedis -->
+  <line x1="726" y1="126" x2="726" y2="142" stroke="#1a7f37" stroke-width="1.5"/>
+  <text x="732" y="154" font-size="11.5" font-weight="700" fill="#1a7f37" text-anchor="end">MiniRedis 저장소: 2.4 µs (1.9%)</text>
+
+  <!-- Bottom Left: h11 -> httptools (C=50, N=5000 GET small) -->
+  <rect x="28" y="170" width="342" height="138" rx="8" fill="#f6f8fa" stroke="#eaeef2"/>
+  <text x="44" y="194" font-size="13" font-weight="700" fill="#1f2328">HTTP 파서 교체: h11 → httptools</text>
+  <text x="44" y="211" font-size="11" fill="#656d76">동시 요청 C=50, N=5,000 GET keep-alive</text>
+
+  <!-- Bars max 9000 -> width 140px, start x=104 -->
+  <!-- h11: 5051.9 -> 78.6px -->
+  <text x="44" y="242" font-size="12" font-weight="600" fill="#57606a">h11</text>
+  <rect x="104" y="229" width="79" height="18" rx="4" fill="#8c959f"/>
+  <text x="189" y="242" font-size="11.5" font-weight="600" fill="#57606a">5,052 req/s (8.52ms)</text>
+
+  <!-- httptools: 7813.3 -> 121.5px -->
+  <text x="44" y="276" font-size="12" font-weight="700" fill="#0969da">httptools</text>
+  <rect x="104" y="263" width="122" height="18" rx="4" fill="#0969da"/>
+  <text x="232" y="276" font-size="11.5" font-weight="700" fill="#0969da">7,813 req/s (+54.7%)</text>
+  <text x="104" y="296" font-size="11" fill="#1a7f37" font-weight="600">p50 지연 8.52ms → 5.62ms 단축</text>
+
+  <!-- Bottom Right: PUT large (~16KB) optimization -->
+  <rect x="390" y="170" width="342" height="138" rx="8" fill="#f6f8fa" stroke="#eaeef2"/>
+  <text x="406" y="194" font-size="13" font-weight="700" fill="#1f2328">큰 JSON(16KB) 단건 지연 개선 (C=1)</text>
+  <text x="406" y="211" font-size="11" fill="#656d76">중복 재귀 검증 제거 + httptools 적용 누적</text>
+
+  <!-- Bars max 900 µs -> width 200px, start x=470 -->
+  <!-- Initial: 820.4 -> 182.3px -->
+  <text x="406" y="240" font-size="11.5" font-weight="600" fill="#57606a">초기</text>
+  <rect x="466" y="228" width="182" height="15" rx="3" fill="#cf222e" opacity="0.75"/>
+  <text x="654" y="239" font-size="11.5" font-weight="600" fill="#cf222e">820.4 µs</text>
+
+  <!-- Step 1: 511.7 -> 113.7px -->
+  <text x="406" y="264" font-size="11.5" font-weight="600" fill="#57606a">재귀 제거</text>
+  <rect x="466" y="252" width="114" height="15" rx="3" fill="#bf8700" opacity="0.85"/>
+  <text x="586" y="263" font-size="11.5" font-weight="600" fill="#9a6700">511.7 µs</text>
+
+  <!-- Step 2: 429.8 -> 95.5px -->
+  <text x="406" y="288" font-size="11.5" font-weight="700" fill="#1a7f37">+httptools</text>
+  <rect x="466" y="276" width="96" height="15" rx="3" fill="#1a7f37"/>
+  <text x="568" y="287" font-size="11.5" font-weight="700" fill="#1a7f37">429.8 µs (-47.6%)</text>
+</svg>

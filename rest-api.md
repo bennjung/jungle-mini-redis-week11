@@ -30,6 +30,8 @@
 | TTL 설정·변경·즉시 삭제 | POST | `/kv/expire` | JSON 본문 | 200 |
 | 남은 TTL 조회 | GET | `/kv/ttl` | `key` 쿼리 | 200 |
 | TTL 제거 | POST | `/kv/persist` | JSON 본문 | 200 |
+| 키별 락 획득·연장 | POST | `/kv/lock/acquire` | JSON 본문 | 200 |
+| 키별 락 해제 | POST | `/kv/lock/release` | JSON 본문 | 200 |
 
 ## 2. 입력 제한
 
@@ -384,5 +386,27 @@ TTL의 저장소 행동 계약은 [TTL 계약](resc/scenario_01_storage/01-ttl-c
 
 - active 만료는 lifespan의 100ms 주기 타이머가 실행한다. tick은 1ms 시간 예산·최대 50 cycles·표본 20개·25% 규칙을 쓰고, 표본은 중복 없이 뽑는다. tick 예외는 지수 backoff로 재시도하고 연속 5회 실패하면 active 정리를 멈춘다. HTTP 표면에는 영향을 주지 않는다.
 - `incr`·`decr`는 lazy 만료 검사를 하고, 만료된 키는 `NOT_FOUND`, 살아 있는 키의 TTL은 유지한다.
+
+## 10. 키별 원자적 락
+
+상세 계약은 [키별 원자적 락 계약](resc/scenario_05_cache_lock/05-lock-contract.md)을 따른다.
+
+### 10.1 락 획득·연장 (`POST /kv/lock/acquire`)
+
+- 요청 본문: `{"key": str, "token": str, "ttl": int}` (세 필드 외 추가 필드는 `400 INVALID_INPUT`)
+- `key`·`token`은 UTF-8 1~256바이트 문자열, `ttl`은 1 이상의 정수 밀리초(`bool` 제외).
+- 락이 없거나 만료됐거나 같은 `token`이 이미 점유 중이면 만료 시각을 `now + ttl`로 설정·연장하고 HTTP **200** `{"acquired":true}`를 반환한다.
+- 다른 `token`이 유효한 락을 점유 중이면 상태를 변경하지 않고 HTTP **409** `{"error":"LOCK_BUSY","retry_after_ms":남은밀리초}`를 반환한다.
+
+### 10.2 락 해제 (`POST /kv/lock/release`)
+
+- 요청 본문: `{"key": str, "token": str}` (두 필드 외 추가 필드는 `400 INVALID_INPUT`)
+- 현재 유효한 락의 소유 토큰이 일치하면 즉시 제거하고 HTTP **200** `{"released":true}`를 반환한다.
+- 락이 없거나 만료됐거나 소유 토큰이 다르면 상태를 변경하지 않고 HTTP **200** `{"released":false}`를 반환한다.
+
+### 10.3 경계와 한계
+
+- 락 상태(`_locks`)는 일반 KV(`_data`)와 분리되어 `PUT`/`GET`/`DELETE /kv`와 충돌하지 않으며, lazy 만료 및 100ms 주기 active 정리를 공유한다.
+- Fencing Token 기반 `PUT /kv` 쓰기 차단은 범위 밖이므로, 락 TTL을 초과한 뒤 뒤늦게 도착한 `PUT /kv`의 덮어쓰기는 막지 않는다.
 - `POST /kv/expire`·`POST /kv/persist`는 계약 필드 외 추가 필드를 무시한다. `PUT /kv`와 같다. `POST /kv/incr`·`POST /kv/decr`는 조건 필드가 조용히 무시되지 않도록 알 수 없는 필드를 계속 거절한다(8절).
 - TTL 표면에서 남은 미정은 없다. 중복 JSON 필드·`Content-Type`·404/405 같은 공통 HTTP 정책은 7절의 미정을 따른다.

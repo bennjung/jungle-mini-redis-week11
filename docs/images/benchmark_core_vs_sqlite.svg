@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="320" viewBox="0 0 880 320" role="img" aria-label="MiniRedis 코어 vs SQLite 성능 비교">
+  <rect width="880" height="320" rx="12" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.5"/>
+  <text x="28" y="36" font-family="'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="18" font-weight="700" fill="#0f172a">MiniRedis 인메모리 코어 vs SQLite(WAL) 성능 비교</text>
+  <text x="28" y="58" font-family="'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="12.5" fill="#475569">조건: 초기 좌석 500석 · 조회 10,000건 / 예매 경합 5,000건 · 동시성 100 (demo_ticket.py)</text>
+
+  <!-- Legend -->
+  <rect x="615" y="24" width="14" height="14" rx="3" fill="#2563eb"/>
+  <text x="635" y="36" font-family="'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="12.5" font-weight="600" fill="#1e293b">MiniRedis (해시 테이블)</text>
+  <rect x="775" y="24" width="14" height="14" rx="3" fill="#94a3b8"/>
+  <text x="795" y="36" font-family="'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="12.5" font-weight="600" fill="#475569">SQLite</text>
+
+  <!-- Left Panel: Throughput -->
+  <rect x="28" y="76" width="470" height="218" rx="8" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="46" y="102" font-family="'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="14" font-weight="700" fill="#0f172a">처리량 (req/s, 높을수록 좋음)</text>
+
+  <!-- Grid lines Left (max 340,000 -> width 270) -->
+  <line x1="125" y1="120" x2="125" y2="268" stroke="#cbd5e1" stroke-width="1"/>
+  <line x1="205" y1="120" x2="205" y2="268" stroke="#e2e8f0" stroke-dasharray="3,3"/>
+  <line x1="284" y1="120" x2="284" y2="268" stroke="#e2e8f0" stroke-dasharray="3,3"/>
+  <line x1="364" y1="120" x2="364" y2="268" stroke="#e2e8f0" stroke-dasharray="3,3"/>
+  <text x="125" y="283" text-anchor="middle" font-family="'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="11" fill="#64748b">0</text>
+  <text x="205" y="283" text-anchor="middle" font-family="'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="11" fill="#64748b">100k</text>
+  <text x="284" y="283" text-anchor="middle" font-family="'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="11" fill="#64748b">200k</text>
+  <text x="364" y="283" text-anchor="middle" font-family="'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="11" fill="#64748b">300k</text>
+
+  <!-- Read 10k -->
+  <text x="115" y="152" text-anchor="end" font-family="'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="12.5" font-weight="600" fill="#1e293b">조회 (10k)</text>
+  <rect x="125" y="130" width="240.2" height="20" rx="4" fill="#2563eb"/>
+  <text x="372" y="145" font-family="'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="12" font-weight="700" fill="#1d4ed8">301,544 req/s (14.1x)</text>
+  <rect x="125" y="155" width="17.0" height="20" rx="4" fill="#94a3b8"/>
+  <text x="149" y="170" font-family="'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="11.5" font-weight="600" fill="#475569">21,382 req/s</text>
+
+  <!-- Book 5k -->
+  <text x="115" y="226" text-anchor="end" font-family="'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="12.5" font-weight="600" fill="#1e293b">예매 (5k)</text>
+  <rect x="125" y="204" width="147.5" height="20" rx="4" fill="#2563eb"/>
+  <text x="279" y="219" font-family="'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="12" font-weight="700" fill="#1d4ed8">185,230 req/s (8.2x)</text>
+  <rect x="125" y="229" width="18.0" height="20" rx="4" fill="#94a3b8"/>
+  <text x="150" y="244" font-family="'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="11.5" font-weight="600" fill="#475569">22,615 req/s</text>
+
+  <!-- Right Panel: p95 Latency -->
+  <rect x="514" y="76" width="338" height="218" rx="8" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="532" y="102" font-family="'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="14" font-weight="700" fill="#0f172a">p95 응답 지연 (ms, 낮을수록 좋음)</text>
+
+  <!-- Grid lines Right (max 14ms -> width 180) -->
+  <line x1="608" y1="120" x2="608" y2="268" stroke="#cbd5e1" stroke-width="1"/>
+  <line x1="672" y1="120" x2="672" y2="268" stroke="#e2e8f0" stroke-dasharray="3,3"/>
+  <line x1="737" y1="120" x2="737" y2="268" stroke="#e2e8f0" stroke-dasharray="3,3"/>
+  <text x="608" y="283" text-anchor="middle" font-family="'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="11" fill="#64748b">0</text>
+  <text x="672" y="283" text-anchor="middle" font-family="'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="11" fill="#64748b">5ms</text>
+  <text x="737" y="283" text-anchor="middle" font-family="'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="11" fill="#64748b">10ms</text>
+
+  <!-- Read p95 -->
+  <text x="598" y="152" text-anchor="end" font-family="'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="12.5" font-weight="600" fill="#1e293b">조회 (10k)</text>
+  <rect x="608" y="130" width="2" height="20" rx="1" fill="#2563eb"/>
+  <text x="617" y="145" font-family="'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="12" font-weight="700" fill="#1d4ed8">0.00 ms</text>
+  <rect x="608" y="155" width="145.0" height="20" rx="4" fill="#94a3b8"/>
+  <text x="760" y="170" font-family="'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="11.5" font-weight="600" fill="#475569">11.28 ms</text>
+
+  <!-- Book p95 -->
+  <text x="598" y="226" text-anchor="end" font-family="'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="12.5" font-weight="600" fill="#1e293b">예매 (5k)</text>
+  <rect x="608" y="204" width="2" height="20" rx="1" fill="#2563eb"/>
+  <text x="617" y="219" font-family="'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="12" font-weight="700" fill="#1d4ed8">0.00 ms</text>
+  <rect x="608" y="229" width="104.7" height="20" rx="4" fill="#94a3b8"/>
+  <text x="720" y="244" font-family="'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="11.5" font-weight="600" fill="#475569">8.14 ms</text>
+</svg>

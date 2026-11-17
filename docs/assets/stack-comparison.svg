@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 320" width="760" height="320" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif">
+  <rect width="760" height="320" rx="12" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
+
+  <!-- Header -->
+  <text x="28" y="34" font-size="16" font-weight="700" fill="#1f2328">JMeter 카운터 처리량 — Flask 대비 FastAPI 1.16~1.69배 · C=10 포화</text>
+  <text x="28" y="54" font-size="12" fill="#656d76">POST /kv/incr · N=10,000 · 각 동시성 5회 중앙값 (총 140회 · 1,400,000건 실패 0건)</text>
+
+  <!-- Legend -->
+  <line x1="555" y1="28" x2="579" y2="28" stroke="#0969da" stroke-width="3"/>
+  <circle cx="567" cy="28" r="4" fill="#0969da"/>
+  <text x="586" y="32" font-size="12" font-weight="600" fill="#1f2328">FastAPI (ASGI)</text>
+
+  <line x1="555" y1="48" x2="579" y2="48" stroke="#8c959f" stroke-width="2.5" stroke-dasharray="5,4"/>
+  <circle cx="567" cy="48" r="3.5" fill="#8c959f"/>
+  <text x="586" y="52" font-size="12" fill="#57606a">Flask (이전 WSGI)</text>
+
+  <!-- Plot area: x=90..690 (width=600), y=80..265 (height=185), y_max=4500 -->
+  <!-- y = 265 - (val / 4500) * 185 -->
+  <!-- y=0: 265, y=1000: 223.9, y=2000: 182.8, y=3000: 141.7, y=4000: 100.6 -->
+  <g stroke="#eaeef2" stroke-width="1">
+    <line x1="90" y1="265" x2="690" y2="265"/>
+    <line x1="90" y1="223.9" x2="690" y2="223.9"/>
+    <line x1="90" y1="182.8" x2="690" y2="182.8"/>
+    <line x1="90" y1="141.7" x2="690" y2="141.7"/>
+    <line x1="90" y1="100.6" x2="690" y2="100.6"/>
+  </g>
+  <g font-size="11" fill="#656d76" text-anchor="end">
+    <text x="80" y="269">0</text>
+    <text x="80" y="228">1,000</text>
+    <text x="80" y="187">2,000</text>
+    <text x="80" y="146">3,000</text>
+    <text x="80" y="105">4,000 req/s</text>
+  </g>
+
+  <!-- Saturation highlight band at C=10..100 -->
+  <rect x="295" y="84" width="380" height="181" rx="6" fill="#0969da" opacity="0.04"/>
+  <text x="485" y="97" font-size="11" fill="#0969da" text-anchor="middle" font-weight="600">C=10 이후 단일 이벤트 루프 처리량 포화 구간</text>
+
+  <!-- X positions: C=1: 150, C=10: 320, C=50: 490, C=100: 660 -->
+  <g font-size="12" font-weight="600" fill="#1f2328" text-anchor="middle">
+    <text x="150" y="286">C = 1</text>
+    <text x="320" y="286">C = 10</text>
+    <text x="490" y="286">C = 50</text>
+    <text x="660" y="286">C = 100</text>
+  </g>
+
+  <!-- Flask line: (150, 207.6), (320, 169.0), (490, 172.7), (660, 172.4) -->
+  <polyline fill="none" stroke="#8c959f" stroke-width="2.5" stroke-dasharray="5,4"
+    points="150,207.6 320,169.0 490,172.7 660,172.4"/>
+  <g fill="#8c959f">
+    <circle cx="150" cy="207.6" r="4"/>
+    <circle cx="320" cy="169.0" r="4"/>
+    <circle cx="490" cy="172.7" r="4"/>
+    <circle cx="660" cy="172.4" r="4"/>
+  </g>
+  <g font-size="11" fill="#57606a" text-anchor="middle">
+    <text x="150" y="224">1,395</text>
+    <text x="320" y="186">2,335</text>
+    <text x="490" y="190">2,245</text>
+    <text x="660" y="190">2,254</text>
+  </g>
+
+  <!-- FastAPI line: 1620.23->198.4, 3813.06->108.2, 3786.36->109.3, 3715.39->112.2 -->
+  <polyline fill="none" stroke="#0969da" stroke-width="3.5"
+    points="150,198.4 320,108.2 490,109.3 660,112.2"/>
+  <g fill="#0969da" stroke="#ffffff" stroke-width="2">
+    <circle cx="150" cy="198.4" r="5.5"/>
+    <circle cx="320" cy="108.2" r="5.5"/>
+    <circle cx="490" cy="109.3" r="5.5"/>
+    <circle cx="660" cy="112.2" r="5.5"/>
+  </g>
+  <g font-size="12" font-weight="700" fill="#0969da" text-anchor="middle">
+    <text x="150" y="186">1,620 (1.16x)</text>
+    <text x="320" y="128">3,813 (1.63x)</text>
+    <text x="490" y="129">3,786 (1.69x)</text>
+    <text x="660" y="132">3,715 (1.65x)</text>
+  </g>
+</svg>
