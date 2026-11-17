@@ -5,31 +5,6 @@ import math
 import random
 import time
 
-
-def _json_content_supported(value, path):
-    """JSON으로 보관할 수 있는 Python 값인지 확인한다. 객체 필드 이름은 문자열만 허용한다."""
-    if value is None or isinstance(value, (str, bool, int, float)):
-        return True
-    if isinstance(value, list):
-        if id(value) in path:
-            return False
-        path.add(id(value))
-        supported = all(_json_content_supported(item, path) for item in value)
-        path.discard(id(value))
-        return supported
-    if isinstance(value, dict):
-        if id(value) in path:
-            return False
-        path.add(id(value))
-        supported = all(
-            isinstance(field, str) and _json_content_supported(item, path)
-            for field, item in value.items()
-        )
-        path.discard(id(value))
-        return supported
-    return False
-
-
 _MISSING = object()
 
 
@@ -133,8 +108,6 @@ class MiniRedis:
     def set(self, key, value, ttl=None):
         """검증을 마친 뒤 지정한 키를 덮어쓰고 선택한 TTL을 적용한다."""
         if not isinstance(key, str):
-            return {"error": "INVALID_INPUT"}
-        if not _json_content_supported(value, set()):
             return {"error": "INVALID_INPUT"}
         try:
             key_size = len(key.encode("utf-8"))

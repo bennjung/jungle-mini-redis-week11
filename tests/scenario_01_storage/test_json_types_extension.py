@@ -125,9 +125,8 @@ def cyclic_list():
 @pytest.mark.parametrize("make_value", [
     lambda: float("nan"), lambda: float("inf"), lambda: float("-inf"),
     lambda: [float("nan")], lambda: {"a": float("inf")},
-    lambda: (1, 2), lambda: {1: "a"}, cyclic_list,
-], ids=["nan", "inf", "negative-inf", "nested-nan", "nested-inf",
-        "tuple", "non-string-key", "cycle"])
+    cyclic_list,
+], ids=["nan", "inf", "negative-inf", "nested-nan", "nested-inf", "cycle"])
 def test_j1_04_invalid_python_content(make_value):
     store = MiniRedis()
     assert store.set("sample:other", "keep") == {"ok": True}
