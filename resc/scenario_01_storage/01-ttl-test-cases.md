@@ -95,7 +95,7 @@
   - `advance(30_000)` → `get` = `{"found": False}`.
   - 없는 키 `expire("ttl:missing", 1_000)` → `{"found": False}`.
   - 만료된 키 `expire("ttl:one", 1_000)` → `{"found": False}`. `get` = `{"found": False}`.
-  - `expire("ttl:one", 0)`와 `expire("ttl:one", -1)`은 각각 새 사전 상태에서 `{"found": True, "ttl": 0}`. `get` = `{"found": False}`. TTL 구조에서 제거된다.
+  - `expire("ttl:one", 0)`와 `expire("ttl:one", -1)`은 각각 새 사전 상태에서 `{"found": True, "ttl": 0}`. 호출 직후 `_data`와 TTL 구조에서 제거됐는지 확인하고, 이어 `get` = `{"found": False}`. `get`의 lazy 만료에 기대지 않는다.
 - 유지: `expire`는 `value`를 바꾸지 않는다. 즉시 삭제는 `value`와 TTL을 함께 제거한다.
 
 ## T1-09. expire 입력 거절

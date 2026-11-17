@@ -223,6 +223,9 @@ def test_t1_08_expire_immediate_delete(store, non_positive_ttl):
         store.expire("ttl:one", non_positive_ttl),
         {"found": True, "ttl": 0},
     )
+    # get()의 lazy 만료에 기대지 않고, expire 호출 직후 상태가 제거됐는지 확인한다.
+    assert_data(store, {"other:one": "keep"})
+    assert_ttl_state(store, {}, [], {})
     assert_mapping(store.get("ttl:one"), {"found": False})
     assert_data(store, {"other:one": "keep"})
     assert_ttl_state(store, {}, [], {})
@@ -396,6 +399,48 @@ class StepClock:
     def __call__(self):
         self._now += 1
         return self._now
+
+
+def test_t1_31_set_accepts_one_ms_ttl(store, clock):
+    """TTL 1ms는 유효하고, 1ms 뒤 정확히 만료된다."""
+    assert_mapping(store.set("ttl:one", "hello", ttl=1), {"ok": True})
+    assert_mapping(store.ttl("ttl:one"), {"found": True, "ttl": 1})
+    clock.advance(1)
+    assert_mapping(store.get("ttl:one"), {"found": False})
+    assert_ttl_state(store, {}, [], {})
+
+
+@pytest.mark.parametrize("method", ["expire", "ttl", "persist"])
+@pytest.mark.parametrize(
+    "invalid_key",
+    [None, 123, True, [], "", "a" * 257, "\ud800"],
+)
+def test_t1_32_ttl_methods_reject_invalid_key_without_state(
+    store, method, invalid_key
+):
+    """expire·ttl·persist도 잘못된 키를 INVALID_INPUT으로 거절하고 상태를 보존한다."""
+    before_data = snapshot(store)
+    before_ttl = ttl_snapshot(store)
+    if method == "expire":
+        result = store.expire(invalid_key, 1_000)
+    elif method == "ttl":
+        result = store.ttl(invalid_key)
+    else:
+        result = store.persist(invalid_key)
+    assert_mapping(result, {"error": "INVALID_INPUT"})
+    assert_data(store, before_data)
+    assert ttl_snapshot(store) == before_ttl
+    assert_ttl_invariants(store)
+
+
+def test_t1_33_default_clock_is_epoch_ms():
+    """clock 주입이 없을 때 기본 시계가 epoch ms를 반환한다."""
+    import time
+
+    before = int(time.time() * 1000)
+    now = MiniRedis()._now_ms()
+    after = int(time.time() * 1000)
+    assert before - 1_000 <= now <= after + 1_000
 
 
 def test_t1_24_ttl_uses_one_clock_read():
