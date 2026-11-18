@@ -1,6 +1,7 @@
 pytest==9.2.0
 fastapi
 uvicorn
+httptools
 httpx
 psutil
 hypothesis

@@ -52,7 +52,7 @@
 
 남은 44개는 수동 검토상 대부분 **도달 불가능한 분기·반환값 미사용·동작이 같은 equivalent mutant**다.
 
-- `_json_content_supported`의 cycle guard 11개: 현재 호출 경로에서는 `json.dumps`가 cycle을 거절해 외부 결과가 같다.
+- 당시 `_json_content_supported`의 cycle guard 11개: 당시 호출 경로에서 `json.dumps`가 cycle을 거절해 외부 결과가 같았다. 이 함수는 이후 1요청 구간 분석에 따른 변경에서 제거됐으므로 이 수치는 변경 전 기록이다.
 - `_json_type`의 `number`/`unknown` 문자열 4개: `_adjust`가 숫자 타입에는 `_json_type`을 호출하지 않아 도달하지 않는다.
 - `_active_expire_cycle`의 `random.sample` fallback 7개: `_sampler`가 생성자에서 항상 채워져 fallback이 실행되지 않는다.
 - `set`의 `json.dumps` 옵션·`_lazy_expire` 인자 7개: 현재 값·시계 경로에서 결과가 같다.

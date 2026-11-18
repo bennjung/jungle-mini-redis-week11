@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>날씨 조회 · Mini Redis 데모</title>
+  <style>
+    body { font-family: sans-serif; max-width: 38rem; margin: 5rem auto; padding: 0 1.5rem; line-height: 1.6; color: #25342e; background: #f4f7f2; }
+    h1 { margin-bottom: .25rem; }
+    label, select, button { font-size: 1rem; }
+    select, button { padding: .65rem; margin: .5rem .5rem .5rem 0; }
+    button { background: #245b43; color: white; border: 0; border-radius: .3rem; cursor: pointer; }
+    button:disabled { opacity: .5; }
+    #result { margin: 2rem 0; font-size: 1.4rem; }
+    #error { color: #a52828; }
+  </style>
+</head>
+<body>
+  <h1>오늘의 날씨</h1>
+  <p>Mini Redis 응답 재사용 데모</p>
+  <label for="place">장소</label>
+  <select id="place">
+    <option value="37.566,126.978">서울특별시</option>
+    <option value="35.179,129.076">부산광역시</option>
+    <option value="35.872,128.601">대구광역시</option>
+    <option value="37.456,126.705">인천광역시</option>
+    <option value="35.160,126.852">광주광역시</option>
+    <option value="36.351,127.385">대전광역시</option>
+    <option value="35.538,129.311">울산광역시</option>
+    <option value="36.480,127.289">세종특별자치시</option>
+    <option value="current">현재 위치</option>
+  </select>
+  <button id="lookup" type="button">날씨 조회</button>
+  <p id="result" aria-live="polite">장소를 선택하고 날씨를 조회하세요.</p>
+  <p id="error" role="alert"></p>
+  <p><small>날씨 데이터: <a href="https://open-meteo.com/">Open-Meteo</a> · 처리 과정은 데모 서버 터미널을 확인하세요.</small></p>
+  <script>
+    const place = document.getElementById("place");
+    const button = document.getElementById("lookup");
+    const result = document.getElementById("result");
+    const error = document.getElementById("error");
+    button.addEventListener("click", async () => {
+      error.textContent = "";
+      result.textContent = "조회 중…";
+      button.disabled = true;
+      try {
+        let coordinates;
+        if (place.value === "current") {
+          if (!navigator.geolocation) throw new Error("현재 위치를 사용할 수 없습니다. 다른 장소를 선택해 주세요.");
+          const position = await new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition(resolve, reject, {timeout: 10000}));
+          coordinates = [position.coords.latitude, position.coords.longitude];
+        } else {
+          coordinates = place.value.split(",");
+        }
+        const params = new URLSearchParams({latitude: coordinates[0], longitude: coordinates[1]});
+        const response = await fetch(`/weather?${params}`);
+        if (!response.ok) throw new Error("날씨를 가져오지 못했습니다.");
+        const data = await response.json();
+        result.textContent = `${place.selectedOptions[0].textContent} · ${data.current.temperature_2m}°C`;
+      } catch (err) {
+        result.textContent = "";
+        error.textContent = typeof err.code === "number"
+          ? "현재 위치를 가져오지 못했습니다. 다른 장소를 선택해 주세요."
+          : (err.message || "날씨를 가져오지 못했습니다.");
+      } finally {
+        button.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
