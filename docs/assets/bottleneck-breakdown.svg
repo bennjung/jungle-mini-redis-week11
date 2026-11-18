@@ -1,60 +1,55 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 330" width="760" height="330" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif">
-  <rect width="760" height="330" rx="12" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 740 265" width="740" height="265" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif" role="img" aria-labelledby="title desc">
+  <title id="title">작은 GET 요청 병목 분석과 httptools 적용 효과</title>
+  <desc id="desc">단건 GET small 기준 초기 h11은 207.8µs(HTTP 73.7%, FastAPI 24.5%, 저장소 1.1%), httptools 적용 후 125.9µs(-39.4%)입니다. 동시성 50 지연 p50은 h11 8.52ms(5,052 req/s)에서 httptools 5.62ms(-34.0%, 7,813 req/s)로 줄었습니다.</desc>
+  <rect width="740" height="265" rx="10" fill="#ffffff" stroke="#d0d7de"/>
 
   <!-- Header -->
-  <text x="28" y="34" font-size="16" font-weight="700" fill="#1f2328">2. 병목 구간 분석 및 파서·검증 개선 효과 (perf/request-breakdown 실측)</text>
-  <text x="28" y="54" font-size="12" fill="#656d76">저장소 자체는 ~2.4 µs(1.9%)에 불과하며, 앞단 HTTP 파서(h11→httptools)와 직렬화가 지연을 지배</text>
+  <text x="24" y="30" font-size="15.5" font-weight="700" fill="#1f2328">작은 GET 요청 병목 분석과 httptools 적용 효과</text>
+  <text x="24" y="49" font-size="11.5" fill="#57606a">저장소(2.4µs)가 아니라 앞단 HTTP 파서와 프레임워크가 지배 · Raw Socket keep-alive 실측</text>
 
-  <!-- Top Section: Stacked horizontal breakdown of 1 GET small request (125.9 µs) -->
-  <text x="28" y="84" font-size="13" font-weight="700" fill="#1f2328">단일 GET 요청(125.9 µs) 구간별 차지 시간 (httptools + asyncio)</text>
+  <!-- Legend -->
+  <rect x="24" y="62" width="11" height="11" rx="2" fill="#cf222e" opacity="0.85"/>
+  <text x="40" y="72" font-size="11" fill="#1f2328">TCP · uvicorn · HTTP 파서</text>
+  <rect x="190" y="62" width="11" height="11" rx="2" fill="#0969da" opacity="0.85"/>
+  <text x="206" y="72" font-size="11" fill="#1f2328">FastAPI · JSON</text>
+  <rect x="304" y="62" width="11" height="11" rx="2" fill="#1a7f37"/>
+  <text x="320" y="72" font-size="11" fill="#1f2328">MiniRedis 저장소 (2.4µs)</text>
 
-  <!-- Total width 704px (x=28..732): 60.4% = 425.2px, 37.7% = 265.4px, 1.9% = 13.4px -->
-  <rect x="28" y="96" width="425.2" height="30" rx="4" fill="#cf222e" opacity="0.85"/>
-  <rect x="454.2" y="96" width="264.4" height="30" rx="4" fill="#0969da" opacity="0.85"/>
-  <rect x="719.6" y="96" width="12.4" height="30" rx="2" fill="#1a7f37"/>
+  <line x1="24" y1="83" x2="716" y2="83" stroke="#eaeef2"/>
 
-  <text x="240" y="115" font-size="12" font-weight="700" fill="#ffffff" text-anchor="middle">TCP + uvicorn + httptools (75.9 µs · 60.4%)</text>
-  <text x="586" y="115" font-size="12" font-weight="700" fill="#ffffff" text-anchor="middle">FastAPI + JSON (47.5 µs · 37.7%)</text>
+  <!-- Section 1: C=1 Latency (1 µs = 2.0 px, x start = 148) -->
+  <text x="24" y="103" font-size="13" font-weight="700" fill="#1f2328">1. 단건 1요청 지연 (C=1, p50 µs · 짧을수록 빠름)</text>
 
-  <!-- Callout for 1.9% MiniRedis -->
-  <line x1="726" y1="126" x2="726" y2="142" stroke="#1a7f37" stroke-width="1.5"/>
-  <text x="732" y="154" font-size="11.5" font-weight="700" fill="#1a7f37" text-anchor="end">MiniRedis 저장소: 2.4 µs (1.9%)</text>
+  <!-- Initial h11: 207.8 us -> 415.6px -->
+  <text x="24" y="129" font-size="12" font-weight="600" fill="#57606a">초기 (h11)</text>
+  <rect x="148" y="116" width="306" height="18" rx="3" fill="#cf222e" opacity="0.85"/>
+  <rect x="455" y="116" width="102" height="18" rx="3" fill="#0969da" opacity="0.85"/>
+  <rect x="558" y="116" width="5" height="18" rx="1" fill="#1a7f37"/>
+  <text x="301" y="129" font-size="10.5" font-weight="600" fill="#ffffff" text-anchor="middle">153.1µs (73.7%)</text>
+  <text x="506" y="129" font-size="10.5" font-weight="600" fill="#ffffff" text-anchor="middle">51.1µs</text>
+  <text x="571" y="129" font-size="12" font-weight="700" fill="#1f2328">207.8 µs</text>
 
-  <!-- Bottom Left: h11 -> httptools (C=50, N=5000 GET small) -->
-  <rect x="28" y="170" width="342" height="138" rx="8" fill="#f6f8fa" stroke="#eaeef2"/>
-  <text x="44" y="194" font-size="13" font-weight="700" fill="#1f2328">HTTP 파서 교체: h11 → httptools</text>
-  <text x="44" y="211" font-size="11" fill="#656d76">동시 요청 C=50, N=5,000 GET keep-alive</text>
+  <!-- httptools: 125.9 us -> 251.8px -->
+  <text x="24" y="157" font-size="12" font-weight="700" fill="#0969da">httptools 적용</text>
+  <rect x="148" y="144" width="152" height="18" rx="3" fill="#cf222e" opacity="0.85"/>
+  <rect x="301" y="144" width="95" height="18" rx="3" fill="#0969da" opacity="0.85"/>
+  <rect x="397" y="144" width="5" height="18" rx="1" fill="#1a7f37"/>
+  <text x="224" y="157" font-size="10.5" font-weight="600" fill="#ffffff" text-anchor="middle">75.9µs (60.4%)</text>
+  <text x="348" y="157" font-size="10.5" font-weight="600" fill="#ffffff" text-anchor="middle">47.5µs</text>
+  <text x="410" y="157" font-size="12" font-weight="700" fill="#0969da">125.9 µs (-39.4%)</text>
 
-  <!-- Bars max 9000 -> width 140px, start x=104 -->
-  <!-- h11: 5051.9 -> 78.6px -->
-  <text x="44" y="242" font-size="12" font-weight="600" fill="#57606a">h11</text>
-  <rect x="104" y="229" width="79" height="18" rx="4" fill="#8c959f"/>
-  <text x="189" y="242" font-size="11.5" font-weight="600" fill="#57606a">5,052 req/s (8.52ms)</text>
+  <line x1="24" y1="175" x2="716" y2="175" stroke="#eaeef2"/>
 
-  <!-- httptools: 7813.3 -> 121.5px -->
-  <text x="44" y="276" font-size="12" font-weight="700" fill="#0969da">httptools</text>
-  <rect x="104" y="263" width="122" height="18" rx="4" fill="#0969da"/>
-  <text x="232" y="276" font-size="11.5" font-weight="700" fill="#0969da">7,813 req/s (+54.7%)</text>
-  <text x="104" y="296" font-size="11" fill="#1a7f37" font-weight="600">p50 지연 8.52ms → 5.62ms 단축</text>
+  <!-- Section 2: C=50 Latency (1 ms = 45px, x start = 148) -->
+  <text x="24" y="196" font-size="13" font-weight="700" fill="#1f2328">2. 동시 요청 지연 (C=50, N=5,000 GET · p50 ms · 짧을수록 빠름)</text>
 
-  <!-- Bottom Right: PUT large (~16KB) optimization -->
-  <rect x="390" y="170" width="342" height="138" rx="8" fill="#f6f8fa" stroke="#eaeef2"/>
-  <text x="406" y="194" font-size="13" font-weight="700" fill="#1f2328">큰 JSON(16KB) 단건 지연 개선 (C=1)</text>
-  <text x="406" y="211" font-size="11" fill="#656d76">중복 재귀 검증 제거 + httptools 적용 누적</text>
+  <!-- h11: 8.52 ms -> 383.4px -->
+  <text x="24" y="222" font-size="12" font-weight="600" fill="#57606a">h11</text>
+  <rect x="148" y="209" width="383" height="18" rx="3" fill="#8c959f"/>
+  <text x="539" y="222" font-size="12" font-weight="600" fill="#57606a">8.52 ms (5,052 req/s)</text>
 
-  <!-- Bars max 900 µs -> width 200px, start x=470 -->
-  <!-- Initial: 820.4 -> 182.3px -->
-  <text x="406" y="240" font-size="11.5" font-weight="600" fill="#57606a">초기</text>
-  <rect x="466" y="228" width="182" height="15" rx="3" fill="#cf222e" opacity="0.75"/>
-  <text x="654" y="239" font-size="11.5" font-weight="600" fill="#cf222e">820.4 µs</text>
-
-  <!-- Step 1: 511.7 -> 113.7px -->
-  <text x="406" y="264" font-size="11.5" font-weight="600" fill="#57606a">재귀 제거</text>
-  <rect x="466" y="252" width="114" height="15" rx="3" fill="#bf8700" opacity="0.85"/>
-  <text x="586" y="263" font-size="11.5" font-weight="600" fill="#9a6700">511.7 µs</text>
-
-  <!-- Step 2: 429.8 -> 95.5px -->
-  <text x="406" y="288" font-size="11.5" font-weight="700" fill="#1a7f37">+httptools</text>
-  <rect x="466" y="276" width="96" height="15" rx="3" fill="#1a7f37"/>
-  <text x="568" y="287" font-size="11.5" font-weight="700" fill="#1a7f37">429.8 µs (-47.6%)</text>
+  <!-- httptools: 5.62 ms -> 252.9px -->
+  <text x="24" y="248" font-size="12" font-weight="700" fill="#0969da">httptools</text>
+  <rect x="148" y="235" width="253" height="18" rx="3" fill="#0969da"/>
+  <text x="409" y="248" font-size="12" font-weight="700" fill="#0969da">5.62 ms (-34.0% · 7,813 req/s)</text>
 </svg>

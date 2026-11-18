@@ -43,7 +43,7 @@ def test_first_lookup_stores_and_second_reuses(demo):
     stored = storage.get("/kv", params={"key": "weather:37.566:126.978"}).json()
     assert json.loads(stored["value"]) == first.json()
     ttl = storage.get("/kv/ttl", params={"key": "weather:37.566:126.978"}).json()
-    assert ttl["found"] and 0 < ttl["ttl"] <= 600000
+    assert ttl["found"] and 0 < ttl["ttl"] <= 60000
     output = capsys.readouterr().out
     assert "저장 성공" in output and "재사용" in output and "원본 호출: 1회" in output
 
@@ -63,28 +63,40 @@ def test_storage_failure_is_not_success(capsys):
     assert "실패" in capsys.readouterr().out
 
 
-def test_origin_failure_does_not_store():
+def test_origin_failure_does_not_store_and_releases_lock():
+    store = MiniRedis()
+    storage = TestClient(create_storage_app(store))
     calls = []
 
     def transport(request):
         calls.append(request)
         if request.url.host == "127.0.0.1":
-            return httpx.Response(200, json={"found": False})
+            return storage.request(
+                request.method, str(request.url), content=request.content,
+                headers=dict(request.headers),
+            )
         return httpx.Response(503)
 
     with httpx.Client(transport=httpx.MockTransport(transport)) as http:
         client = TestClient(create_app(client=http))
         assert client.get("/weather", params={"latitude": 37.566, "longitude": 126.978}).status_code == 502
     assert not any(r.method == "PUT" for r in calls)
+    assert store._locks == {}
 
 
-def test_store_failure_is_reported(capsys):
+def test_store_failure_is_reported_and_releases_lock(capsys):
+    store = MiniRedis()
+    storage = TestClient(create_storage_app(store))
+
     def transport(request):
         if request.url.host != "127.0.0.1":
             return httpx.Response(200, json={"current": {"temperature_2m": 22}})
-        if request.method == "GET":
-            return httpx.Response(200, json={"found": False})
-        return httpx.Response(500)
+        if request.method == "PUT" and request.url.path == "/kv":
+            return httpx.Response(500)
+        return storage.request(
+            request.method, str(request.url), content=request.content,
+            headers=dict(request.headers),
+        )
 
     with httpx.Client(transport=httpx.MockTransport(transport)) as http:
         response = TestClient(create_app(client=http)).get(
@@ -94,6 +106,7 @@ def test_store_failure_is_reported(capsys):
     output = capsys.readouterr().out
     assert "실패" in output
     assert "저장 성공" not in output
+    assert store._locks == {}
 
 
 def test_invalid_coordinates_rejected_without_external_calls(demo):
